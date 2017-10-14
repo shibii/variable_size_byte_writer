@@ -1,0 +1,9 @@
+[package]
+name = "variable_size_byte_writer"
+version = "0.1.0"
+authors = ["Seppo Kilpeläinen <seppo.kilpelainen@gmail.com>"]
+description = "A library for writing variable-size bytes into io::Write traited targets."
+license = "MIT"
+
+
+[dependencies]
