@@ -84,7 +84,7 @@ impl VariableSizeByteWriter {
         where T: Write
     {
         if !self.can_insert_32() {
-            self.flush_complete_bytes(writer)?;
+            self.try_flush_complete_bytes(writer)?;
         }
         self.insert_32_unchecked(variable, bits);
         Ok(())
@@ -94,13 +94,13 @@ impl VariableSizeByteWriter {
         where T: Write
     {
         if !self.can_insert_16() {
-            self.flush_complete_bytes(writer)?;
+            self.try_flush_complete_bytes(writer)?;
         }
         self.insert_16_unchecked(variable, bits);
         Ok(())
     }
 
-    pub fn flush_complete_bytes<T>(&mut self, writer: &mut T) -> std::io::Result<()>
+    pub fn try_flush_complete_bytes<T>(&mut self, writer: &mut T) -> std::io::Result<()>
         where T: Write
     {
         let complete = self.complete_bytes();
@@ -390,7 +390,7 @@ mod tests {
     }
 
     #[test]
-    fn test_flush_complete_bytes() {
+    fn test_try_flush_complete_bytes() {
         let mut writer = VariableSizeByteWriter::new(6);
         writer.buf[0] = 0xFF;
         writer.buf[1] = 0xA;
@@ -398,7 +398,7 @@ mod tests {
         writer.buf[3] = 0xC;
         writer.bits = 28;
         let mut target = std::io::Cursor::new(vec![]);
-        writer.flush_complete_bytes(&mut target).unwrap();
+        writer.try_flush_complete_bytes(&mut target).unwrap();
         assert_eq!(&target.get_ref()[..3], [0xFF, 0xA, 0xAB]);
         assert_eq!(writer.bits, 4);
     }
