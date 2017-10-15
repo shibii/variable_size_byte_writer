@@ -1,11 +1,14 @@
+#![feature(test)]
+
 #[macro_use]
-extern crate bencher;
+extern crate test;
 extern crate variable_size_byte_writer;
 
 use std::io::prelude::*;
-use bencher::Bencher;
+use test::Bencher;
 use variable_size_byte_writer::*;
 
+#[bench]
 fn write_32_vec(bench: &mut Bencher) {
     let mut writer = VariableSizeByteWriter::new(8192);
     let mut target = std::io::Cursor::new(vec![]);
@@ -15,6 +18,7 @@ fn write_32_vec(bench: &mut Bencher) {
     });
 }
 
+#[bench]
 fn write_32_file(bench: &mut Bencher) {
     let mut writer = VariableSizeByteWriter::new(8192);
     let mut file = std::fs::File::create("benches/temp/write_32_file.temp").unwrap();
@@ -24,6 +28,7 @@ fn write_32_file(bench: &mut Bencher) {
     std::fs::remove_file("benches/temp/write_32_file.temp").unwrap();
 }
 
+#[bench]
 fn write_16_vec(bench: &mut Bencher) {
     let mut writer = VariableSizeByteWriter::new(8192);
     let mut target = std::io::Cursor::new(vec![]);
@@ -33,6 +38,7 @@ fn write_16_vec(bench: &mut Bencher) {
     });
 }
 
+#[bench]
 fn write_16_file(bench: &mut Bencher) {
     let mut writer = VariableSizeByteWriter::new(8192);
     let mut file = std::fs::File::create("benches/temp/write_16_file.temp").unwrap();
@@ -41,11 +47,3 @@ fn write_16_file(bench: &mut Bencher) {
     });
     std::fs::remove_file("benches/temp/write_16_file.temp").unwrap();
 }
-
-benchmark_group!(benches,
-    write_32_vec,
-    write_32_file,
-    write_16_vec,
-    write_16_file
-);
-benchmark_main!(benches);

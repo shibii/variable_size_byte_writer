@@ -5,11 +5,4 @@ authors = ["Seppo Kilpeläinen <seppo.kilpelainen@gmail.com>"]
 description = "A library for writing variable-size bytes into io::Write traited targets."
 license = "MIT"
 
-[[bench]]
-name = "benches"
-harness = false
-
 [dependencies]
-
-[dev-dependencies]
-bencher = "0.1.4"
