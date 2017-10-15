@@ -1,4 +1,5 @@
 use std::io::prelude::*;
+use std::io::{Error, ErrorKind};
 
 pub struct VariableSizeByteWriter {
     buf: Vec<u8>,
@@ -63,18 +64,19 @@ impl VariableSizeByteWriter {
         self.bits = 0;
     }
 
-    pub fn flush_complete_bytes<T>(&mut self, writer: &mut T)
+    pub fn write_range<T>(&mut self, writer: &mut T, from: usize, to: usize, written: &mut usize) -> std::io::Result<()>
         where T: Write
     {
-        writer.write(self.get_complete_bytes());
-        self.erase_complete_bytes();
-    }
-
-    pub fn flush_all_bytes<T>(&mut self, writer: &mut T, partial_bits: &mut u32)
-        where T: Write
-    {
-        writer.write(self.get_all_bytes(&mut *partial_bits));
-        self.erase_all_bytes();
+        *written = 0;
+        while from + *written < to {
+            match writer.write(&self.buf[from + *written..to]) {
+                Ok(0) => return Err(Error::new(ErrorKind::WriteZero, "zero bytes written")),
+                Ok(bytes) => *written += bytes,
+                Err(ref err) if err.kind() == ErrorKind::Interrupted => {}
+                Err(err) => return Err(err),
+            }
+        }
+        Ok(())
     }
 
     pub fn insert_32(&mut self, variable: u32, bits: u32) {
@@ -258,27 +260,23 @@ mod tests {
     }
 
     #[test]
-    fn test_flush_complete_bytes() {
+    fn test_write_range() {
         let mut writer = VariableSizeByteWriter::new(6);
         writer.buf[3] = 0xFF;
         writer.buf[4] = 0xF;
         writer.bits = 36;
-        let mut target = std::io::Cursor::new(vec![]);
-        writer.flush_complete_bytes(&mut target);
-        assert_eq!(&target.get_ref()[..4], [0, 0, 0, 0xFF]);
-    }
 
-    #[test]
-    fn test_flush_all_bytes() {
-        let mut writer = VariableSizeByteWriter::new(6);
-        writer.buf[3] = 0xFF;
-        writer.buf[4] = 0xF;
-        writer.bits = 36;
         let mut target = std::io::Cursor::new(vec![]);
-        let mut partial_bits = 0;
-        writer.flush_all_bytes(&mut target, &mut partial_bits);
+        let mut written: usize = 0;
+        writer.write_range(&mut target, 0, 4, &mut written).unwrap();
+        assert_eq!(written, 4);
         assert_eq!(&target.get_ref()[..4], [0, 0, 0, 0xFF]);
-        assert_eq!(partial_bits, 4);
+
+        let mut target = std::io::Cursor::new(vec![]);
+        let mut written: usize = 0;
+        writer.write_range(&mut target, 2, 4, &mut written).unwrap();
+        assert_eq!(written, 2);
+        assert_eq!(&target.get_ref()[..2], [0, 0xFF]);
     }
 
     #[test]
