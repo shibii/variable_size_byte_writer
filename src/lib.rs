@@ -68,6 +68,8 @@ impl VariableSizeByteWriter {
         let mut offset = 0;
         while from + offset < to {
             self.buf[offset] = self.buf[from + offset];
+            self.buf[from + offset] = 0;
+            offset += 1;
         }
         self.bits -= 8 * (to - from) as u32;
     }
@@ -269,13 +271,13 @@ mod tests {
 
     #[test]
     fn test_move_range_to_start() {
-        let mut writer = VariableSizeByteWriter::new(12);
-        writer.buf[10] = 0xAB;
-        writer.buf[11] = 0xF;
-        writer.bits = 92;
-        writer.move_range_to_start(7, 12);
-        assert_eq!(writer.bits, 44);
-        assert_eq!(writer.buf[..], [0, 0, 0, 0, 0xAB, 0xF]);
+        let mut writer = VariableSizeByteWriter::new(6);
+        writer.buf[4] = 0xAB;
+        writer.buf[5] = 0xF;
+        writer.bits = 44;
+        writer.move_range_to_start(3, 6);
+        assert_eq!(writer.bits, 20);
+        assert_eq!(writer.buf[..], [0, 0xAB, 0xF, 0, 0, 0]);
     }
 
     #[test]
