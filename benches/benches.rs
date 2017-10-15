@@ -24,5 +24,28 @@ fn write_32_file(bench: &mut Bencher) {
     std::fs::remove_file("benches/temp/write_32_file.temp").unwrap();
 }
 
-benchmark_group!(benches, write_32_vec, write_32_file);
+fn write_16_vec(bench: &mut Bencher) {
+    let mut writer = VariableSizeByteWriter::new(8192);
+    let mut target = std::io::Cursor::new(vec![]);
+
+    bench.iter(|| {
+        writer.write_16(&mut target, 0x1A, 9)
+    });
+}
+
+fn write_16_file(bench: &mut Bencher) {
+    let mut writer = VariableSizeByteWriter::new(8192);
+    let mut file = std::fs::File::create("benches/temp/write_16_file.temp").unwrap();
+    bench.iter(|| {
+        writer.write_16(&mut file, 0x1A, 9)
+    });
+    std::fs::remove_file("benches/temp/write_16_file.temp").unwrap();
+}
+
+benchmark_group!(benches,
+    write_32_vec,
+    write_32_file,
+    write_16_vec,
+    write_16_file
+);
 benchmark_main!(benches);
