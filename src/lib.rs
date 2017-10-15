@@ -77,7 +77,7 @@ impl VariableSizeByteWriter {
 	pub fn write_32<T>(&mut self, writer: &mut T, variable: u32, bits: u32) -> std::io::Result<()>
         where T: Write
     {
-        if self.complete_bytes() + 4 >= self.buf.len() {
+        if !self.can_insert_32() {
             self.flush_complete_bytes(writer)?;
         }
         self.insert_32(variable, bits);
@@ -116,6 +116,22 @@ impl VariableSizeByteWriter {
             }
         }
         Ok(())
+    }
+
+    pub fn can_insert_32(&mut self) -> bool {
+        if self.complete_bytes() + 4 >= self.buf.len() {
+            false
+        } else {
+            true
+        }
+    }
+
+    pub fn can_insert_16(&mut self) -> bool {
+        if self.complete_bytes() + 2 >= self.buf.len() {
+            false
+        } else {
+            true
+        }
     }
 
     pub fn insert_32(&mut self, variable: u32, bits: u32) {
@@ -362,6 +378,24 @@ mod tests {
         writer.write_range(&mut target, 2, 4, &mut written).unwrap();
         assert_eq!(written, 2);
         assert_eq!(&target.get_ref()[..2], [0, 0xFF]);
+    }
+
+    #[test]
+    fn test_can_insert_32() {
+        let mut writer = VariableSizeByteWriter::new(6);
+        writer.bits = 15;
+        assert_eq!(writer.can_insert_32(), true);
+        writer.bits = 17;
+        assert_eq!(writer.can_insert_32(), false);
+    }
+
+    #[test]
+    fn test_can_insert_16() {
+        let mut writer = VariableSizeByteWriter::new(6);
+        writer.bits = 31;
+        assert_eq!(writer.can_insert_16(), true);
+        writer.bits = 33;
+        assert_eq!(writer.can_insert_16(), false);
     }
 
     #[test]
