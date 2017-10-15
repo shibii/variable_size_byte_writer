@@ -64,6 +64,14 @@ impl VariableSizeByteWriter {
         self.bits = 0;
     }
 
+    pub fn move_range_to_start(&mut self, from: usize, to: usize) {
+        let mut offset = 0;
+        while from + offset < to {
+            self.buf[offset] = self.buf[from + offset];
+        }
+        self.bits -= 8 * (to - from) as u32;
+    }
+
     pub fn write_range<T>(&mut self, writer: &mut T, from: usize, to: usize, written: &mut usize) -> std::io::Result<()>
         where T: Write
     {
@@ -257,6 +265,17 @@ mod tests {
         writer.erase_all_bytes();
         assert_eq!(writer.bits, 0);
         assert_eq!(writer.buf[..], [0, 0, 0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn test_move_range_to_start() {
+        let mut writer = VariableSizeByteWriter::new(12);
+        writer.buf[10] = 0xAB;
+        writer.buf[11] = 0xF;
+        writer.bits = 92;
+        writer.move_range_to_start(7, 12);
+        assert_eq!(writer.bits, 44);
+        assert_eq!(writer.buf[..], [0, 0, 0, 0, 0xAB, 0xF]);
     }
 
     #[test]
