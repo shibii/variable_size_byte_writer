@@ -20,8 +20,23 @@ impl VariableSizeByteWriter {
     }
 
     #[inline]
+    pub fn all_bytes(&mut self) -> usize {
+        ((self.bits + 7) / 8) as usize
+    }
+
+    #[inline]
     pub fn partial_bits(&mut self) -> u32 {
         (self.bits % 8)
+    }
+
+    #[inline]
+    pub fn padding(&mut self) -> u32 {
+        let partial_bits = self.bits % 8;
+        if partial_bits > 0 {
+            8 - partial_bits
+        } else {
+            0
+        }
     }
 
     #[inline]
@@ -111,6 +126,26 @@ impl VariableSizeByteWriter {
             Err(err) => {
                 if written > 0 {
                     self.move_range_to_start(written, complete + 1);
+                } else {
+                    return Err(err)
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn try_flush_all_bytes<T>(&mut self, writer: &mut T, padding: &mut u32) -> std::io::Result<()>
+        where T: Write
+    {
+        let bytes = self.all_bytes();
+        *padding = self.padding();
+        let mut written = 0;
+        let result = self.write_range(writer, 0, bytes, &mut written);
+        match result {
+            Ok(()) => self.erase_all_bytes(),
+            Err(err) => {
+                if written > 0 {
+                    self.move_range_to_start(written, bytes + 1);
                 } else {
                     return Err(err)
                 }
@@ -259,12 +294,31 @@ mod tests {
     }
 
     #[test]
+    fn test_all_bytes() {
+        let mut writer = VariableSizeByteWriter::new(6);
+        writer.bits = 24;
+        assert_eq!(writer.all_bytes(), 3);
+        writer.bits = 25;
+        assert_eq!(writer.all_bytes(), 4);
+    }
+
+    #[test]
     fn test_partial_bits() {
         let mut writer = VariableSizeByteWriter::new(6);
         writer.buf[3] = 0xFF;
         writer.buf[4] = 0xF;
         writer.bits = 36;
         assert_eq!(writer.partial_bits(), 4);
+    }
+
+    #[test]
+    fn test_padding() {
+        let mut writer = VariableSizeByteWriter::new(6);
+        writer.bits = 33;
+        assert_eq!(writer.padding(), 7);
+
+        writer.bits = 32;
+        assert_eq!(writer.padding(), 0);
     }
 
     #[test]
@@ -401,6 +455,22 @@ mod tests {
         writer.try_flush_complete_bytes(&mut target).unwrap();
         assert_eq!(&target.get_ref()[..3], [0xFF, 0xA, 0xAB]);
         assert_eq!(writer.bits, 4);
+    }
+
+    #[test]
+    fn test_try_flush_all_bytes() {
+        let mut writer = VariableSizeByteWriter::new(6);
+        writer.buf[0] = 0xFF;
+        writer.buf[1] = 0xA;
+        writer.buf[2] = 0xAB;
+        writer.buf[3] = 0xC;
+        writer.bits = 28;
+        let mut target = std::io::Cursor::new(vec![]);
+        let mut padding = 0;
+        writer.try_flush_all_bytes(&mut target, &mut padding).unwrap();
+        assert_eq!(&target.get_ref()[..4], [0xFF, 0xA, 0xAB, 0xC]);
+        assert_eq!(writer.bits, 0);
+        assert_eq!(padding, 4);
     }
 
     #[test]
