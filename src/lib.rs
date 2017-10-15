@@ -24,11 +24,13 @@ impl VariableSizeByteWriter {
         (self.bits % 8)
     }
 
+    #[inline]
     pub fn get_complete_bytes(&mut self) -> &[u8] {
         let bytes = self.complete_bytes();
         &self.buf[..bytes]
     }
 
+    #[inline]
     pub fn get_all_bytes(&mut self, partial_bits: &mut u32) -> &[u8] {
         let bytes = self.complete_bytes();
         *partial_bits = self.partial_bits();
@@ -39,6 +41,7 @@ impl VariableSizeByteWriter {
         }
     }
 
+    #[inline]
     pub fn get_partial_byte(&mut self) -> Option<(u8, u32)> {
         let bytes = self.complete_bytes();
         let partial_bits = self.partial_bits();
@@ -50,6 +53,7 @@ impl VariableSizeByteWriter {
         }
     }
 
+    #[inline]
     pub fn erase_complete_bytes(&mut self) {
         let bytes = self.complete_bytes();
         let possible_partial = self.buf[bytes];
@@ -58,12 +62,14 @@ impl VariableSizeByteWriter {
         self.bits = self.partial_bits() as u32;
     }
 
+    #[inline]
     pub fn erase_all_bytes(&mut self) {
         let bytes = self.complete_bytes();
         self.buf[..bytes + 1].iter_mut().for_each(|n| *n = 0);
         self.bits = 0;
     }
 
+    #[inline]
     pub fn move_range_to_start(&mut self, from: usize, to: usize) {
         let mut offset = 0;
         while from + offset < to {
@@ -80,7 +86,17 @@ impl VariableSizeByteWriter {
         if !self.can_insert_32() {
             self.flush_complete_bytes(writer)?;
         }
-        self.insert_32(variable, bits);
+        self.insert_32_unchecked(variable, bits);
+        Ok(())
+    }
+
+	pub fn write_16<T>(&mut self, writer: &mut T, variable: u16, bits: u32) -> std::io::Result<()>
+        where T: Write
+    {
+        if !self.can_insert_16() {
+            self.flush_complete_bytes(writer)?;
+        }
+        self.insert_16_unchecked(variable, bits);
         Ok(())
     }
 
@@ -118,6 +134,7 @@ impl VariableSizeByteWriter {
         Ok(())
     }
 
+    #[inline]
     pub fn can_insert_32(&mut self) -> bool {
         if self.complete_bytes() + 4 >= self.buf.len() {
             false
@@ -126,6 +143,7 @@ impl VariableSizeByteWriter {
         }
     }
 
+    #[inline]
     pub fn can_insert_16(&mut self) -> bool {
         if self.complete_bytes() + 2 >= self.buf.len() {
             false
@@ -134,6 +152,7 @@ impl VariableSizeByteWriter {
         }
     }
 
+    #[inline]
     pub fn insert_32(&mut self, variable: u32, bits: u32) {
         let byte: usize = self.complete_bytes();
         let offset: u32 = self.partial_bits();
@@ -151,6 +170,7 @@ impl VariableSizeByteWriter {
         self.bits += bits;
     }
 
+    #[inline]
     pub fn insert_32_unchecked(&mut self, variable: u32, bits: u32) {
         let byte: usize = self.complete_bytes();
         let offset: u32 = self.partial_bits();
@@ -183,6 +203,7 @@ impl VariableSizeByteWriter {
         self.bits += bits;
     }
 
+    #[inline]
     pub fn insert_16(&mut self, variable: u16, bits: u32) {
         let byte: usize = self.complete_bytes();
         let offset: u32 = self.partial_bits();
@@ -196,6 +217,7 @@ impl VariableSizeByteWriter {
         self.bits += bits;
     }
 
+    #[inline]
     pub fn insert_16_unchecked(&mut self, variable: u16, bits: u32) {
         let byte: usize = self.complete_bytes();
         let offset: u32 = self.partial_bits();
@@ -342,6 +364,27 @@ mod tests {
 
         writer.write_32(&mut target, 0x1F7, 9).unwrap();
         assert_eq!(writer.buf[..], [0xDC, 0x7, 0, 0, 0, 0]);
+        assert_eq!(writer.bits, 11);
+        assert_eq!(&target.get_ref()[..], [0xF0, 0xF1]);
+    }
+
+    #[test]
+    fn test_write_16() {
+        let mut writer = VariableSizeByteWriter::new(4);
+        let mut target = std::io::Cursor::new(vec![]);
+
+        writer.write_16(&mut target, 0x1F0, 9).unwrap();
+        assert_eq!(writer.buf[..], [0xF0, 0x1, 0, 0]);
+        assert_eq!(writer.bits, 9);
+        assert_eq!(&target.get_ref()[..], []);
+
+        writer.write_16(&mut target, 0x78, 9).unwrap();
+        assert_eq!(writer.buf[..], [0xF0, 0xF1, 0, 0]);
+        assert_eq!(writer.bits, 18);
+        assert_eq!(&target.get_ref()[..], []);
+
+        writer.write_16(&mut target, 0x1F7, 9).unwrap();
+        assert_eq!(writer.buf[..], [0xDC, 0x7, 0, 0]);
         assert_eq!(writer.bits, 11);
         assert_eq!(&target.get_ref()[..], [0xF0, 0xF1]);
     }
