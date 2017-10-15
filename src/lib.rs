@@ -74,6 +74,35 @@ impl VariableSizeByteWriter {
         self.bits -= 8 * (to - from) as u32;
     }
 
+	pub fn write_32<T>(&mut self, writer: &mut T, variable: u32, bits: u32) -> std::io::Result<()>
+        where T: Write
+    {
+        if self.complete_bytes() + 4 >= self.buf.len() {
+            self.flush_complete_bytes(writer)?;
+        }
+        self.insert_32(variable, bits);
+        Ok(())
+    }
+
+    pub fn flush_complete_bytes<T>(&mut self, writer: &mut T) -> std::io::Result<()>
+        where T: Write
+    {
+        let complete = self.complete_bytes();
+        let mut written = 0;
+        let result = self.write_range(writer, 0, complete, &mut written);
+        match result {
+            Ok(()) => self.erase_complete_bytes(),
+            Err(err) => {
+                if written > 0 {
+                    self.move_range_to_start(written, complete + 1);
+                } else {
+                    return Err(err)
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub fn write_range<T>(&mut self, writer: &mut T, from: usize, to: usize, written: &mut usize) -> std::io::Result<()>
         where T: Write
     {
@@ -278,6 +307,41 @@ mod tests {
         writer.move_range_to_start(3, 6);
         assert_eq!(writer.bits, 20);
         assert_eq!(writer.buf[..], [0, 0xAB, 0xF, 0, 0, 0]);
+    }
+
+    #[test]
+    fn test_write_32() {
+        let mut writer = VariableSizeByteWriter::new(6);
+        let mut target = std::io::Cursor::new(vec![]);
+
+        writer.write_32(&mut target, 0x1F0, 9).unwrap();
+        assert_eq!(writer.buf[..], [0xF0, 0x1, 0, 0, 0, 0]);
+        assert_eq!(writer.bits, 9);
+        assert_eq!(&target.get_ref()[..], []);
+
+        writer.write_32(&mut target, 0x78, 9).unwrap();
+        assert_eq!(writer.buf[..], [0xF0, 0xF1, 0, 0, 0, 0]);
+        assert_eq!(writer.bits, 18);
+        assert_eq!(&target.get_ref()[..], []);
+
+        writer.write_32(&mut target, 0x1F7, 9).unwrap();
+        assert_eq!(writer.buf[..], [0xDC, 0x7, 0, 0, 0, 0]);
+        assert_eq!(writer.bits, 11);
+        assert_eq!(&target.get_ref()[..], [0xF0, 0xF1]);
+    }
+
+    #[test]
+    fn test_flush_complete_bytes() {
+        let mut writer = VariableSizeByteWriter::new(6);
+        writer.buf[0] = 0xFF;
+        writer.buf[1] = 0xA;
+        writer.buf[2] = 0xAB;
+        writer.buf[3] = 0xC;
+        writer.bits = 28;
+        let mut target = std::io::Cursor::new(vec![]);
+        writer.flush_complete_bytes(&mut target).unwrap();
+        assert_eq!(&target.get_ref()[..3], [0xFF, 0xA, 0xAB]);
+        assert_eq!(writer.bits, 4);
     }
 
     #[test]
