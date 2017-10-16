@@ -171,20 +171,12 @@ impl VariableSizeByteWriter {
 
     #[inline]
     pub fn can_insert_32(&mut self) -> bool {
-        if self.complete_bytes() + 4 >= self.buf.len() {
-            false
-        } else {
-            true
-        }
+        self.complete_bytes() + 4 < self.buf.len()
     }
 
     #[inline]
     pub fn can_insert_16(&mut self) -> bool {
-        if self.complete_bytes() + 2 >= self.buf.len() {
-            false
-        } else {
-            true
-        }
+        self.complete_bytes() + 2 < self.buf.len()
     }
 
     #[inline]
@@ -193,7 +185,7 @@ impl VariableSizeByteWriter {
         let offset: u32 = self.partial_bits();
 
 		self.buf[byte] |= (variable << offset) as u8;
-        let variable = variable >> 8 - offset;
+        let variable = variable >> (8 - offset);
 		self.buf[byte + 1] |= variable as u8;
         let variable = variable >> 8;
 		self.buf[byte + 2] |= variable as u8;
@@ -214,7 +206,7 @@ impl VariableSizeByteWriter {
             let i = self.buf.get_unchecked_mut(byte as usize);
 		    *i |= (variable << offset) as u8;
         }
-        let variable = variable >> 8 - offset;
+        let variable = variable >> (8 - offset);
         unsafe {
             let i = self.buf.get_unchecked_mut(byte + 1 as usize);
 		    *i |= variable as u8;
@@ -244,7 +236,7 @@ impl VariableSizeByteWriter {
         let offset: u32 = self.partial_bits();
 
 		self.buf[byte] |= (variable << offset) as u8;
-        let variable = variable >> 8 - offset;
+        let variable = variable >> (8 - offset);
 		self.buf[byte + 1] |= variable as u8;
         let variable = variable >> 8;
 		self.buf[byte + 2] |= variable as u8;
@@ -261,7 +253,7 @@ impl VariableSizeByteWriter {
             let i = self.buf.get_unchecked_mut(byte as usize);
 		    *i |= (variable << offset) as u8;
         }
-        let variable = variable >> 8 - offset;
+        let variable = variable >> (8 - offset);
         unsafe {
             let i = self.buf.get_unchecked_mut(byte + 1 as usize);
 		    *i |= variable as u8;
