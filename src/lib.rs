@@ -252,28 +252,28 @@ mod tests {
     #[test]
     fn test_complete_bytes() {
         let mut writer = VariableSizeByteWriter::new(6);
-        writer.buf[3] = 0xFF;
-        writer.buf[4] = 0xF;
-        writer.bits = 36;
+        writer.bits = 31;
+        assert_eq!(writer.complete_bytes(), 3);
+        writer.bits = 32;
         assert_eq!(writer.complete_bytes(), 4);
     }
 
     #[test]
     fn test_all_bytes() {
         let mut writer = VariableSizeByteWriter::new(6);
-        writer.bits = 24;
-        assert_eq!(writer.all_bytes(), 3);
-        writer.bits = 25;
+        writer.bits = 31;
+        assert_eq!(writer.all_bytes(), 4);
+        writer.bits = 32;
         assert_eq!(writer.all_bytes(), 4);
     }
 
     #[test]
     fn test_partial_bits() {
         let mut writer = VariableSizeByteWriter::new(6);
-        writer.buf[3] = 0xFF;
-        writer.buf[4] = 0xF;
-        writer.bits = 36;
-        assert_eq!(writer.partial_bits(), 4);
+        writer.bits = 31;
+        assert_eq!(writer.partial_bits(), 7);
+        writer.bits = 32;
+        assert_eq!(writer.partial_bits(), 0);
     }
 
     #[test]
@@ -281,7 +281,6 @@ mod tests {
         let mut writer = VariableSizeByteWriter::new(6);
         writer.bits = 33;
         assert_eq!(writer.padding(), 7);
-
         writer.bits = 32;
         assert_eq!(writer.padding(), 0);
     }
