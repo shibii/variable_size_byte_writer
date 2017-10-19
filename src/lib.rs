@@ -158,13 +158,13 @@ impl VariableSizeByteWriter {
 
 		self.buf[byte] |= (variable << offset) as u8;
         let variable = variable >> (8 - offset);
-		self.buf[byte + 1] |= variable as u8;
+		self.buf[byte + 1] = variable as u8;
         let variable = variable >> 8;
-		self.buf[byte + 2] |= variable as u8;
+		self.buf[byte + 2] = variable as u8;
         let variable = variable >> 8;
-		self.buf[byte + 3] |= variable as u8;
+		self.buf[byte + 3] = variable as u8;
         let variable = variable >> 8;
-		self.buf[byte + 4] |= variable as u8;
+		self.buf[byte + 4] = variable as u8;
 
         self.bits += bits;
     }
@@ -181,22 +181,22 @@ impl VariableSizeByteWriter {
         let variable = variable >> (8 - offset);
         unsafe {
             let i = self.buf.get_unchecked_mut(byte + 1 as usize);
-		    *i |= variable as u8;
+		    *i = variable as u8;
         }
         let variable = variable >> 8;
         unsafe {
             let i = self.buf.get_unchecked_mut(byte + 2 as usize);
-		    *i |= variable as u8;
+		    *i = variable as u8;
         }
         let variable = variable >> 8;
         unsafe {
             let i = self.buf.get_unchecked_mut(byte + 3 as usize);
-		    *i |= variable as u8;
+		    *i = variable as u8;
         }
         let variable = variable >> 8;
         unsafe {
             let i = self.buf.get_unchecked_mut(byte + 4 as usize);
-		    *i |= variable as u8;
+		    *i = variable as u8;
         }
 
         self.bits += bits;
@@ -210,9 +210,9 @@ impl VariableSizeByteWriter {
 
 		self.buf[byte] |= (variable << offset) as u8;
         let variable = variable >> (8 - offset);
-		self.buf[byte + 1] |= variable as u8;
+		self.buf[byte + 1] = variable as u8;
         let variable = variable >> 8;
-		self.buf[byte + 2] |= variable as u8;
+		self.buf[byte + 2] = variable as u8;
 
         self.bits += bits;
     }
@@ -229,12 +229,12 @@ impl VariableSizeByteWriter {
         let variable = variable >> (8 - offset);
         unsafe {
             let i = self.buf.get_unchecked_mut(byte + 1 as usize);
-		    *i |= variable as u8;
+		    *i = variable as u8;
         }
         let variable = variable >> 8;
         unsafe {
             let i = self.buf.get_unchecked_mut(byte + 2 as usize);
-		    *i |= variable as u8;
+		    *i = variable as u8;
         }
 
         self.bits += bits;
