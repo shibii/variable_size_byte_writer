@@ -7,7 +7,7 @@ pub struct VariableSizeByteWriter {
 }
 
 impl VariableSizeByteWriter {
-    pub fn new(cap: usize) -> VariableSizeByteWriter {
+    pub fn new(cap: usize) -> Self {
         VariableSizeByteWriter {
             buf: vec![0; cap],
             bits: 0,
