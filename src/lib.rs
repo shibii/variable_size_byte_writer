@@ -15,22 +15,22 @@ impl VariableSizeByteWriter {
     }
 
     #[inline]
-    fn complete_bytes(&mut self) -> usize {
+    fn complete_bytes(&self) -> usize {
         (self.bits / 8) as usize
     }
 
     #[inline]
-    fn all_bytes(&mut self) -> usize {
+    fn all_bytes(&self) -> usize {
         ((self.bits + 7) / 8) as usize
     }
 
     #[inline]
-    fn partial_bits(&mut self) -> u32 {
+    fn partial_bits(&self) -> u32 {
         (self.bits % 8)
     }
 
     #[inline]
-    fn padding(&mut self) -> u32 {
+    fn padding(&self) -> u32 {
         let partial_bits = self.bits % 8;
         if partial_bits > 0 {
             8 - partial_bits
@@ -125,7 +125,7 @@ impl VariableSizeByteWriter {
         Ok(())
     }
 
-    fn write_range<T>(&mut self, writer: &mut T, from: usize, to: usize, written: &mut usize) -> std::io::Result<()>
+    fn write_range<T>(&self, writer: &mut T, from: usize, to: usize, written: &mut usize) -> std::io::Result<()>
         where T: Write
     {
         *written = 0;
