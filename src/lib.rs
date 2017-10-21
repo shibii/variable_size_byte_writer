@@ -175,28 +175,15 @@ impl VariableSizeByteWriter {
         let offset: u32 = self.partial_bits();
 
         unsafe {
-            let i = self.buf.get_unchecked_mut(byte as usize);
-		    *i |= (variable << offset) as u8;
-        }
-        let variable = variable >> (8 - offset);
-        unsafe {
-            let i = self.buf.get_unchecked_mut(byte + 1 as usize);
-		    *i = variable as u8;
-        }
-        let variable = variable >> 8;
-        unsafe {
-            let i = self.buf.get_unchecked_mut(byte + 2 as usize);
-		    *i = variable as u8;
-        }
-        let variable = variable >> 8;
-        unsafe {
-            let i = self.buf.get_unchecked_mut(byte + 3 as usize);
-		    *i = variable as u8;
-        }
-        let variable = variable >> 8;
-        unsafe {
-            let i = self.buf.get_unchecked_mut(byte + 4 as usize);
-		    *i = variable as u8;
+            *self.buf.get_unchecked_mut(byte as usize) |= (variable << offset) as u8;
+            let variable = variable >> (8 - offset);
+            *self.buf.get_unchecked_mut(byte + 1 as usize) = variable as u8;
+            let variable = variable >> 8;
+            *self.buf.get_unchecked_mut(byte + 2 as usize) = variable as u8;
+            let variable = variable >> 8;
+            *self.buf.get_unchecked_mut(byte + 3 as usize) = variable as u8;
+            let variable = variable >> 8;
+            *self.buf.get_unchecked_mut(byte + 4 as usize) = variable as u8;
         }
 
         self.bits += bits;
@@ -223,18 +210,11 @@ impl VariableSizeByteWriter {
         let offset: u32 = self.partial_bits();
 
         unsafe {
-            let i = self.buf.get_unchecked_mut(byte as usize);
-		    *i |= (variable << offset) as u8;
-        }
-        let variable = variable >> (8 - offset);
-        unsafe {
-            let i = self.buf.get_unchecked_mut(byte + 1 as usize);
-		    *i = variable as u8;
-        }
-        let variable = variable >> 8;
-        unsafe {
-            let i = self.buf.get_unchecked_mut(byte + 2 as usize);
-		    *i = variable as u8;
+            *self.buf.get_unchecked_mut(byte as usize) |= (variable << offset) as u8;
+            let variable = variable >> (8 - offset);
+            *self.buf.get_unchecked_mut(byte + 1 as usize) = variable as u8;
+            let variable = variable >> 8;
+            *self.buf.get_unchecked_mut(byte + 2 as usize) = variable as u8;
         }
 
         self.bits += bits;
