@@ -66,8 +66,9 @@ impl VariableSizeByteWriter {
         self.bits -= 8 * (to - from) as u32;
     }
 
-	pub fn write_32<T>(&mut self, writer: &mut T, variable: u32, bits: u32) -> std::io::Result<()>
-        where T: Write
+    pub fn write_32<T>(&mut self, writer: &mut T, variable: u32, bits: u32) -> std::io::Result<()>
+    where
+        T: Write,
     {
         if !self.can_insert_32() {
             self.try_flush_complete_bytes(writer)?;
@@ -76,8 +77,9 @@ impl VariableSizeByteWriter {
         Ok(())
     }
 
-	pub fn write_16<T>(&mut self, writer: &mut T, variable: u16, bits: u32) -> std::io::Result<()>
-        where T: Write
+    pub fn write_16<T>(&mut self, writer: &mut T, variable: u16, bits: u32) -> std::io::Result<()>
+    where
+        T: Write,
     {
         if !self.can_insert_16() {
             self.try_flush_complete_bytes(writer)?;
@@ -87,26 +89,30 @@ impl VariableSizeByteWriter {
     }
 
     pub fn try_flush_complete_bytes<T>(&mut self, writer: &mut T) -> std::io::Result<()>
-        where T: Write
+    where
+        T: Write,
     {
         let complete = self.complete_bytes();
         let mut written = 0;
         let result = self.write_range(writer, 0, complete, &mut written);
         match result {
             Ok(()) => self.erase_complete_bytes(),
-            Err(err) => {
-                if written > 0 {
-                    self.move_range_to_start(written, complete + 1);
-                } else {
-                    return Err(err)
-                }
-            }
+            Err(err) => if written > 0 {
+                self.move_range_to_start(written, complete + 1);
+            } else {
+                return Err(err);
+            },
         }
         Ok(())
     }
 
-    pub fn try_flush_all_bytes<T>(&mut self, writer: &mut T, padding: &mut u32) -> std::io::Result<()>
-        where T: Write
+    pub fn try_flush_all_bytes<T>(
+        &mut self,
+        writer: &mut T,
+        padding: &mut u32,
+    ) -> std::io::Result<()>
+    where
+        T: Write,
     {
         let bytes = self.all_bytes();
         *padding = self.padding();
@@ -114,19 +120,24 @@ impl VariableSizeByteWriter {
         let result = self.write_range(writer, 0, bytes, &mut written);
         match result {
             Ok(()) => self.erase_all_bytes(),
-            Err(err) => {
-                if written > 0 {
-                    self.move_range_to_start(written, bytes + 1);
-                } else {
-                    return Err(err)
-                }
-            }
+            Err(err) => if written > 0 {
+                self.move_range_to_start(written, bytes + 1);
+            } else {
+                return Err(err);
+            },
         }
         Ok(())
     }
 
-    fn write_range<T>(&self, writer: &mut T, from: usize, to: usize, written: &mut usize) -> std::io::Result<()>
-        where T: Write
+    fn write_range<T>(
+        &self,
+        writer: &mut T,
+        from: usize,
+        to: usize,
+        written: &mut usize,
+    ) -> std::io::Result<()>
+    where
+        T: Write,
     {
         *written = 0;
         while from + *written < to {
@@ -156,15 +167,15 @@ impl VariableSizeByteWriter {
         let byte: usize = self.complete_bytes();
         let offset: u32 = self.partial_bits();
 
-		self.buf[byte] |= (variable << offset) as u8;
+        self.buf[byte] |= (variable << offset) as u8;
         let variable = variable >> (8 - offset);
-		self.buf[byte + 1] = variable as u8;
+        self.buf[byte + 1] = variable as u8;
         let variable = variable >> 8;
-		self.buf[byte + 2] = variable as u8;
+        self.buf[byte + 2] = variable as u8;
         let variable = variable >> 8;
-		self.buf[byte + 3] = variable as u8;
+        self.buf[byte + 3] = variable as u8;
         let variable = variable >> 8;
-		self.buf[byte + 4] = variable as u8;
+        self.buf[byte + 4] = variable as u8;
 
         self.bits += bits;
     }
@@ -195,11 +206,11 @@ impl VariableSizeByteWriter {
         let byte: usize = self.complete_bytes();
         let offset: u32 = self.partial_bits();
 
-		self.buf[byte] |= (variable << offset) as u8;
+        self.buf[byte] |= (variable << offset) as u8;
         let variable = variable >> (8 - offset);
-		self.buf[byte + 1] = variable as u8;
+        self.buf[byte + 1] = variable as u8;
         let variable = variable >> 8;
-		self.buf[byte + 2] = variable as u8;
+        self.buf[byte + 2] = variable as u8;
 
         self.bits += bits;
     }
@@ -371,7 +382,9 @@ mod tests {
         writer.bits = 28;
         let mut target = std::io::Cursor::new(vec![]);
         let mut padding = 0;
-        writer.try_flush_all_bytes(&mut target, &mut padding).unwrap();
+        writer
+            .try_flush_all_bytes(&mut target, &mut padding)
+            .unwrap();
         assert_eq!(&target.get_ref()[..4], [0xFF, 0xA, 0xAB, 0xC]);
         assert_eq!(writer.bits, 0);
         assert_eq!(padding, 4);
