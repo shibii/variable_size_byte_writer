@@ -66,7 +66,7 @@ impl VariableSizeByteWriter {
         T: Write,
     {
         if !self.can_insert_32() {
-            self.try_flush_complete_bytes(writer)?;
+            self.flush_complete_bytes(writer)?;
         }
         self.insert_32_unchecked(variable, bits);
         Ok(())
@@ -77,7 +77,7 @@ impl VariableSizeByteWriter {
         T: Write,
     {
         if !self.can_insert_16() {
-            self.try_flush_complete_bytes(writer)?;
+            self.flush_complete_bytes(writer)?;
         }
         self.insert_16_unchecked(variable as u16, bits);
         Ok(())
@@ -88,13 +88,13 @@ impl VariableSizeByteWriter {
         T: Write,
     {
         if !self.can_insert_8() {
-            self.try_flush_complete_bytes(writer)?;
+            self.flush_complete_bytes(writer)?;
         }
         self.insert_8_unchecked(variable as u16, bits);
         Ok(())
     }
 
-    pub fn try_flush_complete_bytes<T>(&mut self, writer: &mut T) -> std::io::Result<()>
+    pub fn flush_complete_bytes<T>(&mut self, writer: &mut T) -> std::io::Result<()>
     where
         T: Write,
     {
@@ -112,7 +112,7 @@ impl VariableSizeByteWriter {
         Ok(())
     }
 
-    pub fn try_flush_all_bytes<T>(
+    pub fn flush_all_bytes<T>(
         &mut self,
         writer: &mut T,
         padding: &mut u32,
@@ -418,7 +418,7 @@ mod tests {
     }
 
     #[test]
-    fn test_try_flush_complete_bytes() {
+    fn test_flush_complete_bytes() {
         let mut writer = VariableSizeByteWriter::new(6);
         writer.buf[0] = 0xFF;
         writer.buf[1] = 0xA;
@@ -426,13 +426,13 @@ mod tests {
         writer.buf[3] = 0xC;
         writer.bits = 28;
         let mut target = std::io::Cursor::new(vec![]);
-        writer.try_flush_complete_bytes(&mut target).unwrap();
+        writer.flush_complete_bytes(&mut target).unwrap();
         assert_eq!(&target.get_ref()[..3], [0xFF, 0xA, 0xAB]);
         assert_eq!(writer.bits, 4);
     }
 
     #[test]
-    fn test_try_flush_all_bytes() {
+    fn test_flush_all_bytes() {
         let mut writer = VariableSizeByteWriter::new(6);
         writer.buf[0] = 0xFF;
         writer.buf[1] = 0xA;
@@ -442,7 +442,7 @@ mod tests {
         let mut target = std::io::Cursor::new(vec![]);
         let mut padding = 0;
         writer
-            .try_flush_all_bytes(&mut target, &mut padding)
+            .flush_all_bytes(&mut target, &mut padding)
             .unwrap();
         assert_eq!(&target.get_ref()[..4], [0xFF, 0xA, 0xAB, 0xC]);
         assert_eq!(writer.bits, 0);
