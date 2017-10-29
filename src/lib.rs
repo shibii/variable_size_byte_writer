@@ -31,12 +31,7 @@ impl VariableSizeByteWriter {
 
     #[inline]
     fn padding(&self) -> u32 {
-        let partial_bits = self.bits % 8;
-        if partial_bits > 0 {
-            8 - partial_bits
-        } else {
-            0
-        }
+        (8 - self.partial_bits()) % 8
     }
 
     #[inline]
