@@ -7,6 +7,23 @@ use test::Bencher;
 use variable_size_byte_writer::*;
 
 #[bench]
+fn write_64_vec(bench: &mut Bencher) {
+    let mut writer = VariableSizeByteWriter::new();
+    let mut target = std::io::Cursor::new(vec![]);
+
+    bench.iter(|| writer.write_64(&mut target, 0x1_ABAB_FFFF, 33));
+}
+
+#[bench]
+fn write_64_file(bench: &mut Bencher) {
+    let mut writer = VariableSizeByteWriter::new();
+    let _res = std::fs::create_dir("benches/temp");
+    let mut file = std::fs::File::create("benches/temp/write_64_file.temp").unwrap();
+    bench.iter(|| writer.write_64(&mut file, 0x1_ABAB_FFFF, 33));
+    std::fs::remove_file("benches/temp/write_64_file.temp").unwrap();
+}
+
+#[bench]
 fn write_32_vec(bench: &mut Bencher) {
     let mut writer = VariableSizeByteWriter::new();
     let mut target = std::io::Cursor::new(vec![]);

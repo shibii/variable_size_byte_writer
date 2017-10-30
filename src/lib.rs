@@ -65,6 +65,17 @@ impl VariableSizeByteWriter {
         self.bits -= 8 * (to - from) as u32;
     }
 
+    pub fn write_64<T>(&mut self, writer: &mut T, variable: u64, bits: u32) -> std::io::Result<()>
+    where
+        T: Write,
+    {
+        if !self.can_insert_64() {
+            self.flush_complete_bytes(writer)?;
+        }
+        self.insert_64(variable, bits);
+        Ok(())
+    }
+
     pub fn write_32<T>(&mut self, writer: &mut T, variable: u32, bits: u32) -> std::io::Result<()>
     where
         T: Write,
@@ -162,6 +173,11 @@ impl VariableSizeByteWriter {
     }
 
     #[inline]
+    fn can_insert_64(&mut self) -> bool {
+        self.complete_bytes() + 8 < self.buf.len()
+    }
+
+    #[inline]
     fn can_insert_32(&mut self) -> bool {
         self.complete_bytes() + 4 < self.buf.len()
     }
@@ -174,6 +190,49 @@ impl VariableSizeByteWriter {
     #[inline]
     fn can_insert_8(&mut self) -> bool {
         self.complete_bytes() + 1 < self.buf.len()
+    }
+
+    #[inline]
+    fn insert_64(&mut self, variable: u64, bits: u32) {
+        let byte: usize = self.complete_bytes();
+        let offset: u32 = self.partial_bits();
+
+        unsafe {
+            *self.buf.get_unchecked_mut(byte as usize) |= (variable << offset) as u8;
+            let mut variable = variable >> (8 - offset);
+
+            // for i in 1..9 {
+            //     *self.buf.get_unchecked_mut(byte + i as usize) = variable as u8;
+            //     variable = variable >> 8;
+            // }
+
+            (1..9).for_each(|i| {
+                *self.buf.get_unchecked_mut(byte + i as usize) = variable as u8;
+                variable >>= 8;
+            })
+        }
+
+        // unsafe {
+        //     *self.buf.get_unchecked_mut(byte as usize) |= (variable << offset) as u8;
+        //     let variable = variable >> (8 - offset);
+        //     *self.buf.get_unchecked_mut(byte + 1 as usize) = variable as u8;
+        //     let variable = variable >> 8;
+        //     *self.buf.get_unchecked_mut(byte + 2 as usize) = variable as u8;
+        //     let variable = variable >> 8;
+        //     *self.buf.get_unchecked_mut(byte + 3 as usize) = variable as u8;
+        //     let variable = variable >> 8;
+        //     *self.buf.get_unchecked_mut(byte + 4 as usize) = variable as u8;
+        //     let variable = variable >> 8;
+        //     *self.buf.get_unchecked_mut(byte + 5 as usize) = variable as u8;
+        //     let variable = variable >> 8;
+        //     *self.buf.get_unchecked_mut(byte + 6 as usize) = variable as u8;
+        //     let variable = variable >> 8;
+        //     *self.buf.get_unchecked_mut(byte + 7 as usize) = variable as u8;
+        //     let variable = variable >> 8;
+        //     *self.buf.get_unchecked_mut(byte + 8 as usize) = variable as u8;
+        // }
+
+        self.bits += bits;
     }
 
     #[inline]
@@ -335,6 +394,22 @@ mod tests {
     }
 
     #[test]
+    fn test_write_64() {
+        let mut writer = VariableSizeByteWriter::with_specified_capacity(10);
+        let mut target = std::io::Cursor::new(vec![]);
+
+        writer.write_64(&mut target, 0x1ABABFFFF, 33).unwrap();
+        assert_eq!(writer.buf[..6], [0xFF, 0xFF, 0xAB, 0xAB, 1, 0]);
+        assert_eq!(writer.bits, 33);
+        assert_eq!(&target.get_ref()[..], []);
+
+        writer.write_64(&mut target, 0x100000781, 33).unwrap();
+        assert_eq!(writer.buf[..6], [0x3, 0x0F, 0, 0, 2, 0]);
+        assert_eq!(writer.bits, 34);
+        assert_eq!(&target.get_ref()[..], [0xFF, 0xFF, 0xAB, 0xAB]);
+    }
+
+    #[test]
     fn test_write_32() {
         let mut writer = VariableSizeByteWriter::with_specified_capacity(6);
         let mut target = std::io::Cursor::new(vec![]);
@@ -450,6 +525,15 @@ mod tests {
     }
 
     #[test]
+    fn test_can_insert_64() {
+        let mut writer = VariableSizeByteWriter::with_specified_capacity(10);
+        writer.bits = 15;
+        assert_eq!(writer.can_insert_64(), true);
+        writer.bits = 17;
+        assert_eq!(writer.can_insert_64(), false);
+    }
+
+    #[test]
     fn test_can_insert_32() {
         let mut writer = VariableSizeByteWriter::with_specified_capacity(6);
         writer.bits = 15;
@@ -474,6 +558,18 @@ mod tests {
         assert_eq!(writer.can_insert_8(), true);
         writer.bits = 41;
         assert_eq!(writer.can_insert_8(), false);
+    }
+
+    #[test]
+    fn test_insert_64() {
+        let mut writer = VariableSizeByteWriter::new();
+        writer.insert_64(0x1ABABFFFF, 33);
+        assert_eq!(writer.buf[0..5], [0xFF, 0xFF, 0xAB, 0xAB, 1]);
+        assert_eq!(writer.bits, 33);
+
+        writer.insert_64(0x100000781, 33);
+        assert_eq!(writer.buf[0..10], [0xFF, 0xFF, 0xAB, 0xAB, 0x3, 0x0F, 0, 0, 2, 0]);
+        assert_eq!(writer.bits, 66);
     }
 
     #[test]
