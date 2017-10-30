@@ -35,28 +35,26 @@ use std::io::{Error, ErrorKind};
 /// assert_eq!(target[..], [0x7F, 0x3D]);
 /// ```
 ///
-/// Writing a series of 7bit bytes to a file
+/// Writing a series of 7bit bytes into a file
 ///
 /// ```
+/// use std::fs::File;
 /// use variable_size_byte_writer::*;
 ///
-/// let mut target = Vec::new();
+/// # fn f() -> std::io::Result<()> {
 /// let mut writer = VariableSizeByteWriter::new();
-/// let bytes = [(0x7F, 7),(0x1A, 5),(0x3, 2)];
+/// let mut file = File::create("path").unwrap();
 ///
-/// bytes
-///     .iter()
-///     .for_each(|&(byte, bits)|
-///         writer.write_8(&mut target, byte, bits).unwrap()
-///     );
+/// for variable in 0..0x8F {
+///     writer.write_8(&mut file, variable, 7).unwrap();
+/// }
 ///
 /// let mut padding = 0;
 /// writer
-///     .flush_all_bytes(&mut target, &mut padding)
+///     .flush_all_bytes(&mut file, &mut padding)
 ///     .unwrap();
-///
-/// assert_eq!(padding, 2);
-/// assert_eq!(target[..], [0x7F, 0x3D]);
+/// # Ok(())
+/// # }
 /// ```
 pub struct VariableSizeByteWriter {
     buf: Vec<u8>,
