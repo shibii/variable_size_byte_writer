@@ -2,12 +2,14 @@
 use std::io::prelude::*;
 use std::io::{Error, ErrorKind};
 
-/// `VariableSizeByteWriter` provides functions for writing variable-size bytes into `io::Write` traited targets.
+/// `VariableSizeByteWriter` provides functions for writing variable-size bytes
+/// into `io::Write` traited targets.
 ///
-/// Writes are internally buffered and so the usage of any additional buffering such as `std::io::BufWriter`
-/// is not recommended.
+/// Writes are internally buffered and so the usage of any additional buffering
+/// such as `std::io::BufWriter` is not recommended.
 ///
-/// Note that `VariableSizeByteWriter` does not flush its internal buffer when dropped.
+/// Note that `VariableSizeByteWriter` does not flush its internal buffer when
+/// dropped.
 ///
 /// # Examples
 ///
@@ -62,7 +64,8 @@ pub struct VariableSizeByteWriter {
 }
 
 impl VariableSizeByteWriter {
-    /// Creates a new instance of `VariableSizeByteWriter` with a default internal buffer size.
+    /// Creates a new instance of `VariableSizeByteWriter` with a default
+    /// internal buffer size.
     ///
     /// # Examples
     ///
@@ -74,7 +77,8 @@ impl VariableSizeByteWriter {
         VariableSizeByteWriter::with_specified_capacity(8192)
     }
 
-    /// Creates a new instance of `VariableSizeByteWriter` with a specific internal buffer size.
+    /// Creates a new instance of `VariableSizeByteWriter` with a specific
+    /// internal buffer size.
     ///
     /// # Examples
     ///
@@ -136,15 +140,17 @@ impl VariableSizeByteWriter {
         self.bits -= 8 * (to - from) as u32;
     }
 
-    /// Writes a variable-sized byte `variable` with a specific length of `bits` into the given `target`.
+    /// Writes a variable-sized byte `variable` with a specific length of `bits`
+    /// into the given `target`.
     ///
-    /// As with all the `write` functions, the operation is buffered and the buffer must
-    /// eventually be flushed with the `flush_all_bytes` function.
+    /// As with all the `write` functions, the operation is buffered and the
+    /// buffer must eventually be flushed with the `flush_all_bytes` function.
     ///
     /// The given byte can be no longer than 64 bits.
     /// The padding of the variable must be clean as in all zeroes.
     ///
-    /// The function might fail once the internal buffer fills up and is flushed into the given target.
+    /// The function might fail once the internal buffer fills up and is flushed
+    /// into the given target.
     ///
     /// # Examples
     ///
@@ -226,10 +232,13 @@ impl VariableSizeByteWriter {
 
     /// Flushes the remaining internal buffer to the given `target`.
     ///
-    /// The function might fail, successfully flushing none or some of the internal buffer.
-    /// If the flush fails, the internal buffer remains intact and contains the content that failed to flush.
+    /// The function might fail, successfully flushing none or some of the
+    /// internal buffer.
+    /// If the flush fails, the internal buffer remains intact and contains
+    /// the content that failed to flush.
     ///
-    /// The padding required to fill the last partial byte can be captured into the argument `padding`.
+    /// The padding required to fill the last partial byte can be captured
+    /// into the argument `padding`.
     /// The padding is only valid if the function return without an error.
     ///
     /// # Examples
