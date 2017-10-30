@@ -73,6 +73,7 @@ impl VariableSizeByteWriter {
     /// use variable_size_byte_writer::*;
     ///
     /// let writer = VariableSizeByteWriter::new();
+    /// ```
     pub fn new() -> Self {
         VariableSizeByteWriter::with_specified_capacity(8192)
     }
@@ -86,6 +87,7 @@ impl VariableSizeByteWriter {
     /// use variable_size_byte_writer::*;
     ///
     /// let writer = VariableSizeByteWriter::with_specified_capacity(4096);
+    /// ```
     pub fn with_specified_capacity(cap: usize) -> Self {
         VariableSizeByteWriter {
             buf: vec![0; cap],
@@ -165,6 +167,7 @@ impl VariableSizeByteWriter {
     /// writer.write_64(&mut file, 0x71CFFABFF, 35)?;
     /// # Ok(())
     /// # }
+    /// ```
     pub fn write_64<T>(&mut self, writer: &mut T, variable: u64, bits: u32) -> std::io::Result<()>
     where
         T: Write,
@@ -259,6 +262,7 @@ impl VariableSizeByteWriter {
     /// writer.flush_all_bytes(&mut file, &mut padding)?;
     /// # Ok(())
     /// # }
+    /// ```
     pub fn flush_all_bytes<T>(
         &mut self,
         writer: &mut T,
