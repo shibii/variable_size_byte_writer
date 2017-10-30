@@ -38,7 +38,6 @@ assert_eq!(target[..], [0xFF, 0xBF, 0x3E]);
 use std::fs::File;
 use variable_size_byte_writer::*;
 
-# fn f() -> std::io::Result<()> {
 let mut writer = VariableSizeByteWriter::new();
 let mut file = File::create("path").unwrap();
 
@@ -50,8 +49,6 @@ let mut padding = 0;
 writer
     .flush_all_bytes(&mut file, &mut padding)
     .unwrap();
-# Ok(())
-# }
 ```
 
 # License
