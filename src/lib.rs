@@ -1,16 +1,65 @@
+
 use std::io::prelude::*;
 use std::io::{Error, ErrorKind};
 
+/// VariableSizeByteWriter provides functions for writing variable-size bytes into `io::Write` traited targets.
+///
+/// Writes are internally buffered and so the usage of any additional buffering such as `std::io::BufWriter`
+/// is not recommended.
+///
+/// Note that `VariableSizeByteWriter` does not flush its internal buffer when dropped.
+///
+/// # Examples
+///
+/// Writing some unconventionally sized bytes into `Vec<u8>`
+///
+/// ```
+/// use variable_size_byte_writer::*;
+///
+/// let mut target = Vec::new();
+/// let mut writer = VariableSizeByteWriter::new();
+/// let bytes = [(0x7F, 7),(0x1A, 5),(0x3, 2)];
+///
+/// bytes
+///     .iter()
+///     .for_each(|&(byte, bits)|
+///         writer.write_8(&mut target, byte, bits).unwrap()
+///     );
+///
+/// let mut padding = 0;
+/// writer
+///     .flush_all_bytes(&mut target, &mut padding)
+///     .unwrap();
+///
+/// assert_eq!(padding, 2);
+/// assert_eq!(target[..], [0x7F, 0x3D]);
+/// ```
 pub struct VariableSizeByteWriter {
     buf: Vec<u8>,
     bits: u32,
 }
 
 impl VariableSizeByteWriter {
+    /// Creates a new instance of `VariableSizeByteWriter` with a default internal buffer size.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use variable_size_byte_writer::*;
+    ///
+    /// let writer = VariableSizeByteWriter::new();
     pub fn new() -> Self {
         VariableSizeByteWriter::with_specified_capacity(8192)
     }
 
+    /// Creates a new instance of `VariableSizeByteWriter` with a specific internal buffer size.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use variable_size_byte_writer::*;
+    ///
+    /// let writer = VariableSizeByteWriter::with_specified_capacity(4096);
     pub fn with_specified_capacity(cap: usize) -> Self {
         VariableSizeByteWriter {
             buf: vec![0; cap],
@@ -65,6 +114,29 @@ impl VariableSizeByteWriter {
         self.bits -= 8 * (to - from) as u32;
     }
 
+    /// Writes a variable-sized byte `variable` with a specific length of `bits` into the given `target`.
+    ///
+    /// As with all the write_<max_bits> functions, the operation is buffered and the buffer must
+    /// eventually be flushed with the `flush_all_bytes` function.
+    ///
+    /// The given byte can be no longer than 64 bits.
+    /// The padding of the variable must be clean as in all zeroes.
+    ///
+    /// The function might fail once the internal buffer fills up and is flushed into the given target.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::fs::File;
+    /// use variable_size_byte_writer::*;
+    ///
+    /// # fn f() -> std::io::Result<()> {
+    /// let mut writer = VariableSizeByteWriter::with_specified_capacity(4096);
+    /// let mut file = File::create("path")?;
+    ///
+    /// writer.write_64(&mut file, 0x71CFFABFF, 35)?;
+    /// # Ok(())
+    /// # }
     pub fn write_64<T>(&mut self, writer: &mut T, variable: u64, bits: u32) -> std::io::Result<()>
     where
         T: Write,
@@ -76,6 +148,7 @@ impl VariableSizeByteWriter {
         Ok(())
     }
 
+    /// Faster than `write_64` but the given byte can be no longer than 32 bits.
     pub fn write_32<T>(&mut self, writer: &mut T, variable: u32, bits: u32) -> std::io::Result<()>
     where
         T: Write,
@@ -87,6 +160,7 @@ impl VariableSizeByteWriter {
         Ok(())
     }
 
+    /// Faster than `write_32` but the given byte can be no longer than 16 bits.
     pub fn write_16<T>(&mut self, writer: &mut T, variable: u16, bits: u32) -> std::io::Result<()>
     where
         T: Write,
@@ -98,6 +172,7 @@ impl VariableSizeByteWriter {
         Ok(())
     }
 
+    /// Faster than `write_16` but the given byte can be no longer than 8 bits.
     pub fn write_8<T>(&mut self, writer: &mut T, variable: u8, bits: u32) -> std::io::Result<()>
     where
         T: Write,
@@ -109,7 +184,7 @@ impl VariableSizeByteWriter {
         Ok(())
     }
 
-    pub fn flush_complete_bytes<T>(&mut self, writer: &mut T) -> std::io::Result<()>
+    fn flush_complete_bytes<T>(&mut self, writer: &mut T) -> std::io::Result<()>
     where
         T: Write,
     {
@@ -127,6 +202,32 @@ impl VariableSizeByteWriter {
         Ok(())
     }
 
+    /// Flushes the remaining internal buffer to the given `target`.
+    ///
+    /// The function might fail, successfully flushing none or some of the internal buffer.
+    /// If the flush fails, the internal buffer remains intact and contains the content that failed to flush.
+    ///
+    /// The padding required to fill the last partial byte can be captured into the argument `padding`.
+    /// The padding is only valid if the function return without an error.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::fs::File;
+    /// use variable_size_byte_writer::*;
+    ///
+    /// # fn f() -> std::io::Result<()> {
+    /// let mut writer = VariableSizeByteWriter::with_specified_capacity(4096);
+    /// let mut file = File::create("path")?;
+    ///
+    /// writer.write_64(&mut file, 0x71CFFABFF, 35)?;
+    /// writer.write_64(&mut file, 0xFFA, 16)?;
+    /// writer.write_64(&mut file, 0xF1CFFABCD, 39)?;
+    ///
+    /// let mut padding = 0;
+    /// writer.flush_all_bytes(&mut file, &mut padding)?;
+    /// # Ok(())
+    /// # }
     pub fn flush_all_bytes<T>(
         &mut self,
         writer: &mut T,
@@ -201,36 +302,11 @@ impl VariableSizeByteWriter {
             *self.buf.get_unchecked_mut(byte as usize) |= (variable << offset) as u8;
             let mut variable = variable >> (8 - offset);
 
-            // for i in 1..9 {
-            //     *self.buf.get_unchecked_mut(byte + i as usize) = variable as u8;
-            //     variable = variable >> 8;
-            // }
-
             (1..9).for_each(|i| {
                 *self.buf.get_unchecked_mut(byte + i as usize) = variable as u8;
                 variable >>= 8;
             })
         }
-
-        // unsafe {
-        //     *self.buf.get_unchecked_mut(byte as usize) |= (variable << offset) as u8;
-        //     let variable = variable >> (8 - offset);
-        //     *self.buf.get_unchecked_mut(byte + 1 as usize) = variable as u8;
-        //     let variable = variable >> 8;
-        //     *self.buf.get_unchecked_mut(byte + 2 as usize) = variable as u8;
-        //     let variable = variable >> 8;
-        //     *self.buf.get_unchecked_mut(byte + 3 as usize) = variable as u8;
-        //     let variable = variable >> 8;
-        //     *self.buf.get_unchecked_mut(byte + 4 as usize) = variable as u8;
-        //     let variable = variable >> 8;
-        //     *self.buf.get_unchecked_mut(byte + 5 as usize) = variable as u8;
-        //     let variable = variable >> 8;
-        //     *self.buf.get_unchecked_mut(byte + 6 as usize) = variable as u8;
-        //     let variable = variable >> 8;
-        //     *self.buf.get_unchecked_mut(byte + 7 as usize) = variable as u8;
-        //     let variable = variable >> 8;
-        //     *self.buf.get_unchecked_mut(byte + 8 as usize) = variable as u8;
-        // }
 
         self.bits += bits;
     }
