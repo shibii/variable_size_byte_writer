@@ -7,7 +7,11 @@ pub struct VariableSizeByteWriter {
 }
 
 impl VariableSizeByteWriter {
-    pub fn new(cap: usize) -> Self {
+    pub fn new() -> Self {
+        VariableSizeByteWriter::with_specified_capacity(8192)
+    }
+
+    pub fn with_specified_capacity(cap: usize) -> Self {
         VariableSizeByteWriter {
             buf: vec![0; cap],
             bits: 0,
@@ -279,8 +283,31 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_new() {
+        let writer = VariableSizeByteWriter::new();
+        assert_eq!(writer.bits, 0);
+        assert_eq!(writer.buf.len(), 8192);
+    }
+
+    #[test]
+    fn test_with_specified_capacity() {
+        let writer = VariableSizeByteWriter::with_specified_capacity(1024);
+        assert_eq!(writer.bits, 0);
+        assert_eq!(writer.buf.len(), 1024);
+    }
+
+    #[test]
+    fn test_default() {
+        let mut writer = VariableSizeByteWriter::new();
+        writer.bits = 31;
+        assert_eq!(writer.complete_bytes(), 3);
+        writer.bits = 32;
+        assert_eq!(writer.complete_bytes(), 4);
+    }
+
+    #[test]
     fn test_complete_bytes() {
-        let mut writer = VariableSizeByteWriter::new(6);
+        let mut writer = VariableSizeByteWriter::new();
         writer.bits = 31;
         assert_eq!(writer.complete_bytes(), 3);
         writer.bits = 32;
@@ -289,7 +316,7 @@ mod tests {
 
     #[test]
     fn test_all_bytes() {
-        let mut writer = VariableSizeByteWriter::new(6);
+        let mut writer = VariableSizeByteWriter::new();
         writer.bits = 31;
         assert_eq!(writer.all_bytes(), 4);
         writer.bits = 32;
@@ -298,7 +325,7 @@ mod tests {
 
     #[test]
     fn test_partial_bits() {
-        let mut writer = VariableSizeByteWriter::new(6);
+        let mut writer = VariableSizeByteWriter::new();
         writer.bits = 31;
         assert_eq!(writer.partial_bits(), 7);
         writer.bits = 32;
@@ -307,7 +334,7 @@ mod tests {
 
     #[test]
     fn test_padding() {
-        let mut writer = VariableSizeByteWriter::new(6);
+        let mut writer = VariableSizeByteWriter::new();
         writer.bits = 33;
         assert_eq!(writer.padding(), 7);
         writer.bits = 32;
@@ -316,7 +343,7 @@ mod tests {
 
     #[test]
     fn test_erase_complete_bytes() {
-        let mut writer = VariableSizeByteWriter::new(6);
+        let mut writer = VariableSizeByteWriter::with_specified_capacity(6);
         writer.buf[3] = 0xFF;
         writer.buf[4] = 0xF;
         writer.bits = 36;
@@ -324,7 +351,7 @@ mod tests {
         assert_eq!(writer.bits, 4);
         assert_eq!(writer.buf[..], [0xF, 0, 0, 0, 0, 0]);
 
-        let mut writer = VariableSizeByteWriter::new(6);
+        let mut writer = VariableSizeByteWriter::with_specified_capacity(6);
         writer.buf[3] = 0xFF;
         writer.bits = 32;
         writer.erase_complete_bytes();
@@ -334,7 +361,7 @@ mod tests {
 
     #[test]
     fn test_erase_all_bytes() {
-        let mut writer = VariableSizeByteWriter::new(6);
+        let mut writer = VariableSizeByteWriter::with_specified_capacity(6);
         writer.buf[3] = 0xFF;
         writer.buf[4] = 0xF;
         writer.bits = 36;
@@ -345,7 +372,7 @@ mod tests {
 
     #[test]
     fn test_move_range_to_start() {
-        let mut writer = VariableSizeByteWriter::new(6);
+        let mut writer = VariableSizeByteWriter::with_specified_capacity(6);
         writer.buf[4] = 0xAB;
         writer.buf[5] = 0xF;
         writer.bits = 44;
@@ -356,7 +383,7 @@ mod tests {
 
     #[test]
     fn test_write_32() {
-        let mut writer = VariableSizeByteWriter::new(6);
+        let mut writer = VariableSizeByteWriter::with_specified_capacity(6);
         let mut target = std::io::Cursor::new(vec![]);
 
         writer.write_32(&mut target, 0x1F0, 9).unwrap();
@@ -377,7 +404,7 @@ mod tests {
 
     #[test]
     fn test_write_16() {
-        let mut writer = VariableSizeByteWriter::new(4);
+        let mut writer = VariableSizeByteWriter::with_specified_capacity(4);
         let mut target = std::io::Cursor::new(vec![]);
 
         writer.write_16(&mut target, 0x1F0, 9).unwrap();
@@ -398,7 +425,7 @@ mod tests {
 
     #[test]
     fn test_write_8() {
-        let mut writer = VariableSizeByteWriter::new(2);
+        let mut writer = VariableSizeByteWriter::with_specified_capacity(2);
         let mut target = std::io::Cursor::new(vec![]);
 
         writer.write_8(&mut target, 0x5F, 7).unwrap();
@@ -419,7 +446,7 @@ mod tests {
 
     #[test]
     fn test_flush_complete_bytes() {
-        let mut writer = VariableSizeByteWriter::new(6);
+        let mut writer = VariableSizeByteWriter::new();
         writer.buf[0] = 0xFF;
         writer.buf[1] = 0xA;
         writer.buf[2] = 0xAB;
@@ -433,7 +460,7 @@ mod tests {
 
     #[test]
     fn test_flush_all_bytes() {
-        let mut writer = VariableSizeByteWriter::new(6);
+        let mut writer = VariableSizeByteWriter::new();
         writer.buf[0] = 0xFF;
         writer.buf[1] = 0xA;
         writer.buf[2] = 0xAB;
@@ -451,7 +478,7 @@ mod tests {
 
     #[test]
     fn test_write_range() {
-        let mut writer = VariableSizeByteWriter::new(6);
+        let mut writer = VariableSizeByteWriter::new();
         writer.buf[3] = 0xFF;
         writer.buf[4] = 0xF;
         writer.bits = 36;
@@ -471,7 +498,7 @@ mod tests {
 
     #[test]
     fn test_can_insert_32() {
-        let mut writer = VariableSizeByteWriter::new(6);
+        let mut writer = VariableSizeByteWriter::with_specified_capacity(6);
         writer.bits = 15;
         assert_eq!(writer.can_insert_32(), true);
         writer.bits = 17;
@@ -480,7 +507,7 @@ mod tests {
 
     #[test]
     fn test_can_insert_16() {
-        let mut writer = VariableSizeByteWriter::new(6);
+        let mut writer = VariableSizeByteWriter::with_specified_capacity(6);
         writer.bits = 31;
         assert_eq!(writer.can_insert_16(), true);
         writer.bits = 33;
@@ -489,7 +516,7 @@ mod tests {
 
     #[test]
     fn test_can_insert_8() {
-        let mut writer = VariableSizeByteWriter::new(6);
+        let mut writer = VariableSizeByteWriter::with_specified_capacity(6);
         writer.bits = 39;
         assert_eq!(writer.can_insert_8(), true);
         writer.bits = 41;
@@ -498,7 +525,7 @@ mod tests {
 
     #[test]
     fn test_insert_32() {
-        let mut writer = VariableSizeByteWriter::new(16);
+        let mut writer = VariableSizeByteWriter::new();
         writer.insert_32(0xF, 4);
         assert_eq!(writer.buf[0..2], [0xF, 0]);
         assert_eq!(writer.bits, 4);
@@ -514,7 +541,7 @@ mod tests {
 
     #[test]
     fn test_insert_32_unchecked() {
-        let mut writer = VariableSizeByteWriter::new(16);
+        let mut writer = VariableSizeByteWriter::new();
         writer.insert_32_unchecked(0xF, 4);
         assert_eq!(writer.buf[0..2], [0xF, 0]);
         assert_eq!(writer.bits, 4);
@@ -530,7 +557,7 @@ mod tests {
 
     #[test]
     fn test_insert_16() {
-        let mut writer = VariableSizeByteWriter::new(16);
+        let mut writer = VariableSizeByteWriter::new();
         writer.insert_16(0xF, 4);
         assert_eq!(writer.buf[0..2], [0xF, 0]);
         assert_eq!(writer.bits, 4);
@@ -546,7 +573,7 @@ mod tests {
 
     #[test]
     fn test_insert_16_unchecked() {
-        let mut writer = VariableSizeByteWriter::new(16);
+        let mut writer = VariableSizeByteWriter::new();
         writer.insert_16_unchecked(0xF, 4);
         assert_eq!(writer.buf[0..2], [0xF, 0]);
         assert_eq!(writer.bits, 4);
@@ -562,7 +589,7 @@ mod tests {
 
     #[test]
     fn test_insert_8() {
-        let mut writer = VariableSizeByteWriter::new(16);
+        let mut writer = VariableSizeByteWriter::new();
         writer.insert_8(0xF, 4);
         assert_eq!(writer.buf[0..2], [0xF, 0]);
         assert_eq!(writer.bits, 4);
@@ -578,7 +605,7 @@ mod tests {
 
     #[test]
     fn test_insert_8_unchecked() {
-        let mut writer = VariableSizeByteWriter::new(16);
+        let mut writer = VariableSizeByteWriter::new();
         writer.insert_8_unchecked(0xF, 4);
         assert_eq!(writer.buf[0..2], [0xF, 0]);
         assert_eq!(writer.bits, 4);
