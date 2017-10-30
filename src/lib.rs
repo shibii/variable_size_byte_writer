@@ -18,12 +18,12 @@ use std::io::{Error, ErrorKind};
 ///
 /// let mut target = Vec::new();
 /// let mut writer = VariableSizeByteWriter::new();
-/// let bytes = [(0x7F, 7),(0x1A, 5),(0x3, 2)];
+/// let bytes = [(0x3F, 6),(0x1AFF, 13),(0x7, 3)];
 ///
 /// bytes
 ///     .iter()
 ///     .for_each(|&(byte, bits)|
-///         writer.write_8(&mut target, byte, bits).unwrap()
+///         writer.write_16(&mut target, byte, bits).unwrap()
 ///     );
 ///
 /// let mut padding = 0;
@@ -32,7 +32,7 @@ use std::io::{Error, ErrorKind};
 ///     .unwrap();
 ///
 /// assert_eq!(padding, 2);
-/// assert_eq!(target[..], [0x7F, 0x3D]);
+/// assert_eq!(target[..], [0xFF, 0xBF, 0x3E]);
 /// ```
 ///
 /// Writing a series of 7bit bytes into a file
