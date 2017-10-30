@@ -34,6 +34,30 @@ use std::io::{Error, ErrorKind};
 /// assert_eq!(padding, 2);
 /// assert_eq!(target[..], [0x7F, 0x3D]);
 /// ```
+///
+/// Writing a series of 7bit bytes to a file
+///
+/// ```
+/// use variable_size_byte_writer::*;
+///
+/// let mut target = Vec::new();
+/// let mut writer = VariableSizeByteWriter::new();
+/// let bytes = [(0x7F, 7),(0x1A, 5),(0x3, 2)];
+///
+/// bytes
+///     .iter()
+///     .for_each(|&(byte, bits)|
+///         writer.write_8(&mut target, byte, bits).unwrap()
+///     );
+///
+/// let mut padding = 0;
+/// writer
+///     .flush_all_bytes(&mut target, &mut padding)
+///     .unwrap();
+///
+/// assert_eq!(padding, 2);
+/// assert_eq!(target[..], [0x7F, 0x3D]);
+/// ```
 pub struct VariableSizeByteWriter {
     buf: Vec<u8>,
     bits: u32,
@@ -116,7 +140,7 @@ impl VariableSizeByteWriter {
 
     /// Writes a variable-sized byte `variable` with a specific length of `bits` into the given `target`.
     ///
-    /// As with all the write_<max_bits> functions, the operation is buffered and the buffer must
+    /// As with all the `write` functions, the operation is buffered and the buffer must
     /// eventually be flushed with the `flush_all_bytes` function.
     ///
     /// The given byte can be no longer than 64 bits.
