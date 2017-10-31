@@ -176,6 +176,16 @@ impl VariableSizeByteWriter {
     /// # Ok(())
     /// # }
     /// ```
+    pub fn write<T>(&mut self, writer: &mut T, variable: u64, bits: u32) -> std::io::Result<()>
+    where
+        T: Write,
+    {
+        if !self.can_insert(bits) {
+            self.flush_complete_bytes(writer)?;
+        }
+        self.insert(variable, bits);
+        Ok(())
+    }
 
     fn flush_complete_bytes<T>(&mut self, writer: &mut T) -> std::io::Result<()>
     where
@@ -225,17 +235,6 @@ impl VariableSizeByteWriter {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn write<T>(&mut self, writer: &mut T, variable: u64, bits: u32) -> std::io::Result<()>
-    where
-        T: Write,
-    {
-        if !self.can_insert(bits) {
-            self.flush_complete_bytes(writer)?;
-        }
-        self.insert(variable, bits);
-        Ok(())
-    }
-
     pub fn flush_all_bytes<T>(
         &mut self,
         writer: &mut T,
