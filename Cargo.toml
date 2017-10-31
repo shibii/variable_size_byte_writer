@@ -1,6 +1,6 @@
 [package]
 name = "variable_size_byte_writer"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["Seppo Kilpeläinen <seppo.kilpelainen@gmail.com>"]
 description = "A library for writing variable-size bytes into io::Write traited targets."
 repository = "https://github.com/shibii/variable_size_byte_writer"
