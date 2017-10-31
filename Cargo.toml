@@ -5,6 +5,7 @@ authors = ["Seppo Kilpeläinen <seppo.kilpelainen@gmail.com>"]
 description = "A library for writing variable-size bytes into io::Write traited targets."
 repository = "https://github.com/shibii/variable_size_byte_writer"
 documentation = "https://docs.rs/variable_size_byte_writer"
+keywords = ["binary"]
 license = "MIT"
 
 [dependencies]
