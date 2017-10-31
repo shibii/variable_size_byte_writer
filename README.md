@@ -20,7 +20,7 @@ let bytes = [(0x3F, 6),(0x1AFF, 13),(0x7, 3)];
 bytes
     .iter()
     .for_each(|&(byte, bits)|
-        writer.write_16(&mut target, byte, bits).unwrap()
+        writer.write(&mut target, byte, bits).unwrap()
     );
 
 let mut padding = 0;
@@ -42,7 +42,7 @@ let mut writer = VariableSizeByteWriter::new();
 let mut file = File::create("path").unwrap();
 
 for variable in 0..0x8F {
-    writer.write_8(&mut file, variable, 7).unwrap();
+    writer.write(&mut file, variable, 7).unwrap();
 }
 
 let mut padding = 0;
