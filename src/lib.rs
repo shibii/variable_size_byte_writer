@@ -333,6 +333,7 @@ impl VariableSizeByteWriter {
         let byte: usize = self.complete_bytes();
         let offset: u32 = self.partial_bits();
 
+        let variable = variable.to_le();
         unsafe {
             *self.buf.get_unchecked_mut(byte as usize) |= (variable << offset) as u8;
             let mut variable = variable >> (8 - offset);
@@ -351,6 +352,7 @@ impl VariableSizeByteWriter {
         let byte: usize = self.complete_bytes();
         let offset: u32 = self.partial_bits();
 
+        let variable = variable.to_le();
         unsafe {
             *self.buf.get_unchecked_mut(byte as usize) |= (variable << offset) as u8;
             let variable = variable >> (8 - offset);
@@ -371,6 +373,7 @@ impl VariableSizeByteWriter {
         let byte: usize = self.complete_bytes();
         let offset: u32 = self.partial_bits();
 
+        let variable = variable.to_le();
         unsafe {
             *self.buf.get_unchecked_mut(byte as usize) |= (variable << offset) as u8;
             let variable = variable >> (8 - offset);
@@ -387,6 +390,7 @@ impl VariableSizeByteWriter {
         let byte: usize = self.complete_bytes();
         let offset: u32 = self.partial_bits();
 
+        let variable = variable.to_le();
         unsafe {
             *self.buf.get_unchecked_mut(byte as usize) |= (variable << offset) as u8;
             let variable = variable >> (8 - offset);
