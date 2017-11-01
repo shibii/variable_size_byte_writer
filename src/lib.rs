@@ -1,6 +1,23 @@
+extern crate typenum;
+extern crate typenum_loops;
 
 use std::io::prelude::*;
 use std::io::{Error, ErrorKind};
+
+pub trait ByteSize: typenum_loops::Loop + typenum::Unsigned + typenum::NonZero {}
+
+impl<T> ByteSize for T
+where
+    T: typenum_loops::Loop + typenum::Unsigned + typenum::NonZero {}
+
+pub type Max8 = typenum::U1;
+pub type Max16 = typenum::U2;
+pub type Max24 = typenum::U3;
+pub type Max32 = typenum::U4;
+pub type Max40 = typenum::U5;
+pub type Max48 = typenum::U6;
+pub type Max56 = typenum::U7;
+pub type Max64 = typenum::U8;
 
 /// `VariableSizeByteWriter` provides functionality for writing variable-size bytes
 /// into `io::Write` traited targets.
@@ -24,11 +41,11 @@ use std::io::{Error, ErrorKind};
 /// bytes
 ///     .iter()
 ///     .for_each(|&(byte, bits)|
-///         writer.write(byte, bits).unwrap()
+///         writer.write::<Max16>(byte, bits).unwrap()
 ///     );
 /// ```
 ///
-/// Writing a series of 7bit bytes into a file, manually
+/// Writing a series of 7-bit bytes into a file, manually
 /// flushing the internal buffer and capturing the
 /// required bits to pad the last byte:
 ///
@@ -41,7 +58,7 @@ use std::io::{Error, ErrorKind};
 /// let mut writer = VariableSizeByteWriter::new(file);
 ///
 /// for variable in 0..0x8F {
-///     writer.write(variable, 7).unwrap();
+///     writer.write::<Max8>(variable, 7).unwrap();
 /// }
 ///
 /// let mut padding = 0;
@@ -122,6 +139,10 @@ where
     /// Writes a variable-sized byte `variable` with a specific length of `bits`
     /// into the given `target`.
     ///
+    /// The function uses the generic or 'turbofish' syntax to optimize the
+    /// write call withing 8-bit boundaries from `Max8` to `Max64`. The intent
+    /// is to use the minimum boundary that fits the selected use case.
+    ///
     /// The padding of the variable must be clean as in all zeroes.
     ///
     /// The function might return an error once the internal buffer fills up
@@ -137,15 +158,18 @@ where
     /// let mut file = File::create("path")?;
     /// let mut writer = VariableSizeByteWriter::new(file);
     ///
-    /// writer.write(0x71CFFABFF, 35)?;
+    /// writer.write::<Max40>(0x71CFFABFF, 35)?;
     /// # Ok(())
     /// # }
     /// ```
-    pub fn write(&mut self, variable: u64, bits: u32) -> std::io::Result<()> {
-        if !self.can_insert(bits) {
+    pub fn write<M>(&mut self, variable: u64, bits: u32) -> std::io::Result<()>
+    where
+        M: ByteSize,
+    {
+        if !self.can_insert::<M>() {
             self.flush_complete_bytes()?;
         }
-        self.insert(variable, bits);
+        self.insert::<M>(variable, bits);
         Ok(())
     }
 
@@ -170,9 +194,9 @@ where
     /// let mut file = File::create("path")?;
     /// let mut writer = VariableSizeByteWriter::new(file);
     ///
-    /// writer.write(0x71CFFABFF, 35)?;
-    /// writer.write(0xFFA, 16)?;
-    /// writer.write(0xF1CFFABCD, 39)?;
+    /// writer.write::<Max16>(0xAF, 9)?;
+    /// writer.write::<Max16>(0x1A4, 11)?;
+    /// writer.write::<Max16>(0x7B, 8)?;
     ///
     /// let mut padding = 0;
     /// writer.flush(&mut padding)?;
@@ -224,14 +248,21 @@ where
     }
 
     #[inline]
-    fn can_insert(&mut self, bits: u32) -> bool {
-        let max_bits = self.buf.len() as u32 * 8;
-        self.bits + bits <= max_bits
+    fn can_insert<M>(&mut self) -> bool
+    where
+        M: ByteSize,
+    {
+        let bytes = M::to_usize();
+        let first = self.complete_bytes();
+        first + bytes < self.buf.len()
     }
 
     #[inline]
-    fn insert(&mut self, variable: u64, bits: u32) {
-        let mut byte: usize = self.complete_bytes();
+    fn insert<M>(&mut self, variable: u64, bits: u32)
+    where
+        M: ByteSize,
+    {
+        let byte: usize = self.complete_bytes();
         let offset: u32 = self.partial_bits();
 
         let variable = variable.to_le();
@@ -239,11 +270,10 @@ where
             *self.buf.get_unchecked_mut(byte as usize) |= (variable << offset) as u8;
             let mut variable = variable >> (8 - offset);
 
-            while variable != 0 {
-                byte += 1;
-                *self.buf.get_unchecked_mut(byte as usize) = variable as u8;
+            M::full_unroll(|i| {
+                *self.buf.get_unchecked_mut(byte + i + 1 as usize) = variable as u8;
                 variable >>= 8;
-            }
+            });
         }
 
         self.bits += bits;
@@ -471,61 +501,56 @@ mod tests {
     fn test_write() {
         let mut writer = VariableSizeByteWriter::with_capacity(Vec::new(), 4);
 
-        writer.write(0xF, 4).unwrap();
-        assert_eq!(writer.buf[..], [0xF, 0, 0, 0]);
+        writer.write::<Max8>(0xA, 4).unwrap();
+        assert_eq!(writer.buf[..], [0xA, 0, 0, 0]);
         assert_eq!(writer.bits, 4);
         assert_eq!(&writer.target[..], []);
 
-        writer.write(0x7FF, 11).unwrap();
-        assert_eq!(writer.buf[..], [0xFF, 0x7F, 0, 0]);
+        writer.write::<Max16>(0x7CB, 11).unwrap();
+        assert_eq!(writer.buf[..], [0xBA, 0x7C, 0, 0]);
         assert_eq!(writer.bits, 15);
         assert_eq!(&writer.target[..], []);
 
-        writer.write(0xFF100, 20).unwrap();
-        assert_eq!(writer.buf[..], [0x7F, 0x80, 0xF8, 0x7]);
-        assert_eq!(writer.bits, 27);
-        assert_eq!(&writer.target[..], [0xFF]);
+        writer.write::<Max16>(0xFFFF, 16).unwrap();
+        assert_eq!(writer.buf[..], [0xBA, 0xFC, 0xFF, 0x7F]);
+        assert_eq!(writer.bits, 31);
+        assert_eq!(&writer.target[..], []);
 
-        writer.write(0x1, 5).unwrap();
-        assert_eq!(writer.buf[..], [0x7F, 0x80, 0xF8, 0xF]);
-        assert_eq!(writer.bits, 32);
-        assert_eq!(&writer.target[..], [0xFF]);
-
-        writer.write(0x1A0, 9).unwrap();
-        assert_eq!(writer.buf[..], [0xA0, 0x1, 0, 0]);
-        assert_eq!(writer.bits, 9);
-        assert_eq!(&writer.target[..], [0xFF, 0x7F, 0x80, 0xF8, 0xF]);
+        writer.write::<Max8>(0xE1, 5).unwrap();
+        assert_eq!(writer.buf[..], [0xFF, 0x70, 0, 0]);
+        assert_eq!(writer.bits, 12);
+        assert_eq!(&writer.target[..], [0xBA, 0xFC, 0xFF]);
     }
 
     #[test]
     fn test_can_insert() {
         let mut writer = VariableSizeByteWriter::with_capacity(Vec::new(), 6);
-        writer.bits = 20;
-        assert_eq!(writer.can_insert(28), true);
-        writer.bits = 21;
-        assert_eq!(writer.can_insert(28), false);
-        writer.bits = 33;
-        assert_eq!(writer.can_insert(15), true);
-        writer.bits = 33;
-        assert_eq!(writer.can_insert(16), false);
-        writer.bits = 47;
-        assert_eq!(writer.can_insert(1), true);
-        writer.bits = 47;
-        assert_eq!(writer.can_insert(2), false);
+        writer.bits = 40;
+        assert_eq!(writer.can_insert::<Max8>(), false);
+        writer.bits = 39;
+        assert_eq!(writer.can_insert::<Max8>(), true);
+        writer.bits = 32;
+        assert_eq!(writer.can_insert::<Max16>(), false);
+        writer.bits = 31;
+        assert_eq!(writer.can_insert::<Max16>(), true);
+        writer.bits = 24;
+        assert_eq!(writer.can_insert::<Max24>(), false);
+        writer.bits = 23;
+        assert_eq!(writer.can_insert::<Max24>(), true);
     }
 
     #[test]
     fn test_insert() {
         let mut writer = VariableSizeByteWriter::new(Vec::new());
-        writer.insert(0xF, 4);
+        writer.insert::<Max8>(0xF, 4);
         assert_eq!(writer.buf[0..2], [0xF, 0]);
         assert_eq!(writer.bits, 4);
 
-        writer.insert(0x77AFA, 20);
+        writer.insert::<Max24>(0x77AFA, 20);
         assert_eq!(writer.buf[0..3], [0xAF, 0xAF, 0x77]);
         assert_eq!(writer.bits, 24);
 
-        writer.insert(0x1BB, 9);
+        writer.insert::<Max16>(0x1BB, 9);
         assert_eq!(writer.buf[0..5], [0xAF, 0xAF, 0x77, 0xBB, 0x1]);
         assert_eq!(writer.bits, 33);
     }
@@ -536,8 +561,8 @@ mod tests {
         {
             let file = File::create("test_drop_temporary_file_buffer.temp").unwrap();
             let mut writer = VariableSizeByteWriter::new(file);
-            writer.write(0xF, 4).unwrap();
-            writer.write(0x7FF, 11).unwrap();
+            writer.write::<Max8>(0xF, 4).unwrap();
+            writer.write::<Max16>(0x7FF, 11).unwrap();
             assert_eq!(writer.buf[..4], [0xFF, 0x7F, 0, 0]);
         }
         let mut file = File::open("test_drop_temporary_file_buffer.temp").unwrap();
