@@ -2,97 +2,251 @@
 use std::io::prelude::*;
 use std::io::{Error, ErrorKind};
 
-/// `VariableSizeByteWriter` provides functions for writing variable-size bytes
+/// `VariableSizeByteWriter` provides functionality for writing variable-size bytes
 /// into `io::Write` traited targets.
 ///
 /// Writes are internally buffered and so the usage of any additional buffering
-/// such as `std::io::BufWriter` is not recommended.
-///
-/// Note that `VariableSizeByteWriter` does not flush its internal buffer when
-/// dropped.
+/// such as `std::io::BufWriter` is not recommended. The internal buffer is
+/// flushed when the object is dropped but any errors that occur during the flushing
+/// go unhandled. Manual flushing is therefore recommended.
 ///
 /// # Examples
 ///
-/// Writing some unconventionally sized bytes into `Vec<u8>`
+/// Writing some unconventionally sized bytes into `Vec<u8>`:
 ///
 /// ```
 /// use variable_size_byte_writer::*;
 ///
 /// let mut target = Vec::new();
-/// let mut writer = VariableSizeByteWriter::new();
+/// let mut writer = VariableSizeByteWriter::new(target);
 /// let bytes = [(0x3F, 6),(0x1AFF, 13),(0x7, 3)];
 ///
 /// bytes
 ///     .iter()
 ///     .for_each(|&(byte, bits)|
-///         writer.write(&mut target, byte, bits).unwrap()
+///         writer.write(byte, bits).unwrap()
 ///     );
-///
-/// let mut padding = 0;
-/// writer
-///     .flush_all_bytes(&mut target, &mut padding)
-///     .unwrap();
-///
-/// assert_eq!(padding, 2);
-/// assert_eq!(target[..], [0xFF, 0xBF, 0x3E]);
 /// ```
 ///
-/// Writing a series of 7bit bytes into a file
+/// Writing a series of 7bit bytes into a file, manually
+/// flushing the internal buffer and capturing the
+/// required bits to pad the last byte:
 ///
 /// ```
 /// use std::fs::File;
 /// use variable_size_byte_writer::*;
 ///
 /// # fn f() -> std::io::Result<()> {
-/// let mut writer = VariableSizeByteWriter::new();
 /// let mut file = File::create("path").unwrap();
+/// let mut writer = VariableSizeByteWriter::new(file);
 ///
 /// for variable in 0..0x8F {
-///     writer.write(&mut file, variable, 7).unwrap();
+///     writer.write(variable, 7).unwrap();
 /// }
 ///
 /// let mut padding = 0;
-/// writer
-///     .flush_all_bytes(&mut file, &mut padding)
-///     .unwrap();
+/// writer.flush(&mut padding).unwrap();
 /// # Ok(())
 /// # }
 /// ```
-pub struct VariableSizeByteWriter {
+pub struct VariableSizeByteWriter<W>
+where
+    W: Write,
+{
     buf: Vec<u8>,
     bits: u32,
+    target: W
 }
 
-impl VariableSizeByteWriter {
-    /// Creates a new instance of `VariableSizeByteWriter` with a default
-    /// internal buffer size.
+impl<W> Drop for VariableSizeByteWriter<W>
+where
+    W: Write,
+{
+    fn drop(&mut self) {
+        let mut padding = 0;
+        let _res = self.flush(&mut padding);
+    }
+}
+
+impl<W> VariableSizeByteWriter<W>
+where
+    W: Write,
+{
+    /// Creates a new instance of `VariableSizeByteWriter`.
+    ///
+    /// The function takes a `io::Write` traited object `target`
+    /// as an argument.
     ///
     /// # Examples
     ///
     /// ```
+    /// use std::fs::File;
     /// use variable_size_byte_writer::*;
     ///
-    /// let writer = VariableSizeByteWriter::new();
+    /// # fn f() -> std::io::Result<()> {
+    /// let mut file = File::create("path").unwrap();
+    /// let mut writer = VariableSizeByteWriter::new(file);
+    /// # Ok(())
+    /// # }
     /// ```
-    pub fn new() -> Self {
-        VariableSizeByteWriter::with_specified_capacity(8192)
+    pub fn new(target: W) -> Self {
+        VariableSizeByteWriter::with_capacity(target, 8192)
     }
 
-    /// Creates a new instance of `VariableSizeByteWriter` with a specific
-    /// internal buffer size.
+    /// Creates a new instance of `VariableSizeByteWriter`
+    /// with non default internal buffer size.
+    ///
+    /// The function takes buffer capacity `cap` and `io::Write` traited
+    /// object `target` as arguments.
     ///
     /// # Examples
     ///
     /// ```
+    /// use std::fs::File;
     /// use variable_size_byte_writer::*;
     ///
-    /// let writer = VariableSizeByteWriter::with_specified_capacity(4096);
+    /// # fn f() -> std::io::Result<()> {
+    /// let mut file = File::create("path").unwrap();
+    /// let mut writer = VariableSizeByteWriter::with_capacity(file, 4096);
+    /// # Ok(())
+    /// # }
     /// ```
-    pub fn with_specified_capacity(cap: usize) -> Self {
+    pub fn with_capacity(target: W, cap: usize) -> Self {
         VariableSizeByteWriter {
             buf: vec![0; cap],
             bits: 0,
+            target: target,
         }
+    }
+
+    /// Writes a variable-sized byte `variable` with a specific length of `bits`
+    /// into the given `target`.
+    ///
+    /// The padding of the variable must be clean as in all zeroes.
+    ///
+    /// The function might return an error once the internal buffer fills up
+    /// and is flushed into the given target.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::fs::File;
+    /// use variable_size_byte_writer::*;
+    ///
+    /// # fn f() -> std::io::Result<()> {
+    /// let mut file = File::create("path")?;
+    /// let mut writer = VariableSizeByteWriter::new(file);
+    ///
+    /// writer.write(0x71CFFABFF, 35)?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn write(&mut self, variable: u64, bits: u32) -> std::io::Result<()> {
+        if !self.can_insert(bits) {
+            self.flush_complete_bytes()?;
+        }
+        self.insert(variable, bits);
+        Ok(())
+    }
+
+    /// Flushes the remaining internal buffer.
+    ///
+    /// The function might fail, successfully flushing none or some of the
+    /// internal buffer.
+    /// If the flush fails, the internal buffer remains intact and contains
+    /// the content that failed to flush.
+    ///
+    /// The padding required to fill the last partial byte can be captured
+    /// into the argument `padding`.
+    /// The padding is only valid if the function return without an error.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::fs::File;
+    /// use variable_size_byte_writer::*;
+    ///
+    /// # fn f() -> std::io::Result<()> {
+    /// let mut file = File::create("path")?;
+    /// let mut writer = VariableSizeByteWriter::new(file);
+    ///
+    /// writer.write(0x71CFFABFF, 35)?;
+    /// writer.write(0xFFA, 16)?;
+    /// writer.write(0xF1CFFABCD, 39)?;
+    ///
+    /// let mut padding = 0;
+    /// writer.flush(&mut padding)?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn flush(&mut self, padding: &mut u32) -> std::io::Result<()> {
+        let bytes = self.all_bytes();
+        *padding = self.padding();
+        let mut written = 0;
+        let result = self.write_range(0, bytes, &mut written);
+        match result {
+            Ok(()) => self.erase_all_bytes(),
+            Err(err) => if written > 0 {
+                self.move_range_to_start(written, bytes + 1);
+            } else {
+                return Err(err);
+            },
+        }
+        Ok(())
+    }
+
+    fn flush_complete_bytes(&mut self) -> std::io::Result<()> {
+        let complete = self.complete_bytes();
+        let mut written = 0;
+        let result = self.write_range(0, complete, &mut written);
+        match result {
+            Ok(()) => self.erase_complete_bytes(),
+            Err(err) => if written > 0 {
+                self.move_range_to_start(written, complete + 1);
+            } else {
+                return Err(err);
+            },
+        }
+        Ok(())
+    }
+
+    fn write_range(&mut self, from: usize, to: usize, written: &mut usize) -> std::io::Result<()> {
+        *written = 0;
+        while from + *written < to {
+            match self.target.write(&self.buf[from + *written..to]) {
+                Ok(0) => return Err(Error::new(ErrorKind::WriteZero, "zero bytes written")),
+                Ok(bytes) => *written += bytes,
+                Err(ref err) if err.kind() == ErrorKind::Interrupted => {}
+                Err(err) => return Err(err),
+            }
+        }
+        Ok(())
+    }
+
+    #[inline]
+    fn can_insert(&mut self, bits: u32) -> bool {
+        let max_bits = self.buf.len() as u32 * 8;
+        self.bits + bits <= max_bits
+    }
+
+    #[inline]
+    fn insert(&mut self, variable: u64, bits: u32) {
+        let mut byte: usize = self.complete_bytes();
+        let offset: u32 = self.partial_bits();
+
+        let variable = variable.to_le();
+        unsafe {
+            *self.buf.get_unchecked_mut(byte as usize) |= (variable << offset) as u8;
+            let mut variable = variable >> (8 - offset);
+
+            while variable != 0 {
+                byte += 1;
+                *self.buf.get_unchecked_mut(byte as usize) = variable as u8;
+                variable >>= 8;
+            }
+        }
+
+        self.bits += bits;
     }
 
     #[inline]
@@ -150,161 +304,6 @@ impl VariableSizeByteWriter {
         }
         self.bits -= 8 * (to - from) as u32;
     }
-
-    /// Writes a variable-sized byte `variable` with a specific length of `bits`
-    /// into the given `target`.
-    ///
-    /// The operation is buffered and the buffer must eventually be flushed
-    /// with the `flush_all_bytes` function.
-    ///
-    /// The padding of the variable must be clean as in all zeroes.
-    ///
-    /// The function might fail once the internal buffer fills up and is flushed
-    /// into the given target.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use std::fs::File;
-    /// use variable_size_byte_writer::*;
-    ///
-    /// # fn f() -> std::io::Result<()> {
-    /// let mut writer = VariableSizeByteWriter::new();
-    /// let mut file = File::create("path")?;
-    ///
-    /// writer.write(&mut file, 0x71CFFABFF, 35)?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn write<T>(&mut self, writer: &mut T, variable: u64, bits: u32) -> std::io::Result<()>
-    where
-        T: Write,
-    {
-        if !self.can_insert(bits) {
-            self.flush_complete_bytes(writer)?;
-        }
-        self.insert(variable, bits);
-        Ok(())
-    }
-
-    fn flush_complete_bytes<T>(&mut self, writer: &mut T) -> std::io::Result<()>
-    where
-        T: Write,
-    {
-        let complete = self.complete_bytes();
-        let mut written = 0;
-        let result = self.write_range(writer, 0, complete, &mut written);
-        match result {
-            Ok(()) => self.erase_complete_bytes(),
-            Err(err) => if written > 0 {
-                self.move_range_to_start(written, complete + 1);
-            } else {
-                return Err(err);
-            },
-        }
-        Ok(())
-    }
-
-    /// Flushes the remaining internal buffer to the given `target`.
-    ///
-    /// The function might fail, successfully flushing none or some of the
-    /// internal buffer.
-    /// If the flush fails, the internal buffer remains intact and contains
-    /// the content that failed to flush.
-    ///
-    /// The padding required to fill the last partial byte can be captured
-    /// into the argument `padding`.
-    /// The padding is only valid if the function return without an error.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use std::fs::File;
-    /// use variable_size_byte_writer::*;
-    ///
-    /// # fn f() -> std::io::Result<()> {
-    /// let mut writer = VariableSizeByteWriter::new();
-    /// let mut file = File::create("path")?;
-    ///
-    /// writer.write(&mut file, 0x71CFFABFF, 35)?;
-    /// writer.write(&mut file, 0xFFA, 16)?;
-    /// writer.write(&mut file, 0xF1CFFABCD, 39)?;
-    ///
-    /// let mut padding = 0;
-    /// writer.flush_all_bytes(&mut file, &mut padding)?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn flush_all_bytes<T>(
-        &mut self,
-        writer: &mut T,
-        padding: &mut u32,
-    ) -> std::io::Result<()>
-    where
-        T: Write,
-    {
-        let bytes = self.all_bytes();
-        *padding = self.padding();
-        let mut written = 0;
-        let result = self.write_range(writer, 0, bytes, &mut written);
-        match result {
-            Ok(()) => self.erase_all_bytes(),
-            Err(err) => if written > 0 {
-                self.move_range_to_start(written, bytes + 1);
-            } else {
-                return Err(err);
-            },
-        }
-        Ok(())
-    }
-
-    fn write_range<T>(
-        &self,
-        writer: &mut T,
-        from: usize,
-        to: usize,
-        written: &mut usize,
-    ) -> std::io::Result<()>
-    where
-        T: Write,
-    {
-        *written = 0;
-        while from + *written < to {
-            match writer.write(&self.buf[from + *written..to]) {
-                Ok(0) => return Err(Error::new(ErrorKind::WriteZero, "zero bytes written")),
-                Ok(bytes) => *written += bytes,
-                Err(ref err) if err.kind() == ErrorKind::Interrupted => {}
-                Err(err) => return Err(err),
-            }
-        }
-        Ok(())
-    }
-
-    #[inline]
-    fn can_insert(&mut self, bits: u32) -> bool {
-        let max_bits = self.buf.len() as u32 * 8;
-        self.bits + bits <= max_bits
-    }
-
-    #[inline]
-    fn insert(&mut self, variable: u64, bits: u32) {
-        let mut byte: usize = self.complete_bytes();
-        let offset: u32 = self.partial_bits();
-
-        let variable = variable.to_le();
-        unsafe {
-            *self.buf.get_unchecked_mut(byte as usize) |= (variable << offset) as u8;
-            let mut variable = variable >> (8 - offset);
-
-            while variable != 0 {
-                byte += 1;
-                *self.buf.get_unchecked_mut(byte as usize) = variable as u8;
-                variable >>= 8;
-            }
-        }
-
-        self.bits += bits;
-    }
 }
 
 
@@ -317,21 +316,21 @@ mod tests {
 
     #[test]
     fn test_new() {
-        let writer = VariableSizeByteWriter::new();
+        let writer = VariableSizeByteWriter::new(Vec::new());
         assert_eq!(writer.bits, 0);
         assert_eq!(writer.buf.len(), 8192);
     }
 
     #[test]
-    fn test_with_specified_capacity() {
-        let writer = VariableSizeByteWriter::with_specified_capacity(1024);
+    fn test_with_capacity() {
+        let writer = VariableSizeByteWriter::with_capacity(Vec::new(), 1024);
         assert_eq!(writer.bits, 0);
         assert_eq!(writer.buf.len(), 1024);
     }
 
     #[test]
     fn test_complete_bytes() {
-        let mut writer = VariableSizeByteWriter::new();
+        let mut writer = VariableSizeByteWriter::new(Vec::new());
         writer.bits = 31;
         assert_eq!(writer.complete_bytes(), 3);
         writer.bits = 32;
@@ -340,7 +339,7 @@ mod tests {
 
     #[test]
     fn test_all_bytes() {
-        let mut writer = VariableSizeByteWriter::new();
+        let mut writer = VariableSizeByteWriter::new(Vec::new());
         writer.bits = 31;
         assert_eq!(writer.all_bytes(), 4);
         writer.bits = 32;
@@ -349,7 +348,7 @@ mod tests {
 
     #[test]
     fn test_partial_bits() {
-        let mut writer = VariableSizeByteWriter::new();
+        let mut writer = VariableSizeByteWriter::new(Vec::new());
         writer.bits = 31;
         assert_eq!(writer.partial_bits(), 7);
         writer.bits = 32;
@@ -358,7 +357,7 @@ mod tests {
 
     #[test]
     fn test_partial_byte() {
-        let mut writer = VariableSizeByteWriter::new();
+        let mut writer = VariableSizeByteWriter::new(Vec::new());
         writer.buf[4] = 0x1F;
         writer.bits = 37;
         assert_eq!(writer.partial_byte(), 0x1F);
@@ -368,7 +367,7 @@ mod tests {
 
     #[test]
     fn test_padding() {
-        let mut writer = VariableSizeByteWriter::new();
+        let mut writer = VariableSizeByteWriter::new(Vec::new());
         writer.bits = 33;
         assert_eq!(writer.padding(), 7);
         writer.bits = 32;
@@ -377,7 +376,7 @@ mod tests {
 
     #[test]
     fn test_erase_complete_bytes() {
-        let mut writer = VariableSizeByteWriter::with_specified_capacity(6);
+        let mut writer = VariableSizeByteWriter::with_capacity(Vec::new(), 6);
         writer.buf[3] = 0xFF;
         writer.buf[4] = 0xF;
         writer.bits = 36;
@@ -385,7 +384,7 @@ mod tests {
         assert_eq!(writer.bits, 4);
         assert_eq!(writer.buf[..], [0xF, 0, 0, 0, 0, 0]);
 
-        let mut writer = VariableSizeByteWriter::with_specified_capacity(6);
+        let mut writer = VariableSizeByteWriter::with_capacity(Vec::new(), 6);
         writer.buf[3] = 0xFF;
         writer.bits = 32;
         writer.erase_complete_bytes();
@@ -395,7 +394,7 @@ mod tests {
 
     #[test]
     fn test_erase_all_bytes() {
-        let mut writer = VariableSizeByteWriter::with_specified_capacity(6);
+        let mut writer = VariableSizeByteWriter::with_capacity(Vec::new(), 6);
         writer.buf[3] = 0xFF;
         writer.buf[4] = 0xF;
         writer.bits = 36;
@@ -406,7 +405,7 @@ mod tests {
 
     #[test]
     fn test_move_range_to_start() {
-        let mut writer = VariableSizeByteWriter::with_specified_capacity(6);
+        let mut writer = VariableSizeByteWriter::with_capacity(Vec::new(), 6);
         writer.buf[4] = 0xAB;
         writer.buf[5] = 0xF;
         writer.bits = 44;
@@ -417,90 +416,90 @@ mod tests {
 
     #[test]
     fn test_flush_complete_bytes() {
-        let mut writer = VariableSizeByteWriter::new();
+        let mut writer = VariableSizeByteWriter::new(Vec::new());
         writer.buf[0] = 0xFF;
         writer.buf[1] = 0xA;
         writer.buf[2] = 0xAB;
         writer.buf[3] = 0xC;
         writer.bits = 28;
-        let mut target = std::io::Cursor::new(vec![]);
-        writer.flush_complete_bytes(&mut target).unwrap();
-        assert_eq!(&target.get_ref()[..3], [0xFF, 0xA, 0xAB]);
+        writer.flush_complete_bytes().unwrap();
+        assert_eq!(&writer.target[..3], [0xFF, 0xA, 0xAB]);
         assert_eq!(writer.bits, 4);
     }
 
     #[test]
-    fn test_flush_all_bytes() {
-        let mut writer = VariableSizeByteWriter::new();
+    fn test_flush() {
+        let mut writer = VariableSizeByteWriter::new(Vec::new());
         writer.buf[0] = 0xFF;
         writer.buf[1] = 0xA;
         writer.buf[2] = 0xAB;
         writer.buf[3] = 0xC;
         writer.bits = 28;
-        let mut target = std::io::Cursor::new(vec![]);
         let mut padding = 0;
         writer
-            .flush_all_bytes(&mut target, &mut padding)
+            .flush(&mut padding)
             .unwrap();
-        assert_eq!(&target.get_ref()[..4], [0xFF, 0xA, 0xAB, 0xC]);
+        assert_eq!(&writer.target[..4], [0xFF, 0xA, 0xAB, 0xC]);
         assert_eq!(writer.bits, 0);
         assert_eq!(padding, 4);
     }
 
     #[test]
     fn test_write_range() {
-        let mut writer = VariableSizeByteWriter::new();
+        let mut writer = VariableSizeByteWriter::new(Vec::new());
         writer.buf[3] = 0xFF;
         writer.buf[4] = 0xF;
         writer.bits = 36;
 
-        let mut target = std::io::Cursor::new(vec![]);
         let mut written: usize = 0;
-        writer.write_range(&mut target, 0, 4, &mut written).unwrap();
+        writer.write_range(0, 4, &mut written).unwrap();
         assert_eq!(written, 4);
-        assert_eq!(&target.get_ref()[..4], [0, 0, 0, 0xFF]);
+        assert_eq!(&writer.target[..4], [0, 0, 0, 0xFF]);
 
-        let mut target = std::io::Cursor::new(vec![]);
+        let mut writer = VariableSizeByteWriter::new(Vec::new());
+        writer.buf[3] = 0xFF;
+        writer.buf[4] = 0xF;
+        writer.bits = 36;
+
         let mut written: usize = 0;
-        writer.write_range(&mut target, 2, 4, &mut written).unwrap();
+        writer.write_range(2, 4, &mut written).unwrap();
         assert_eq!(written, 2);
-        assert_eq!(&target.get_ref()[..2], [0, 0xFF]);
+        assert_eq!(&writer.target[..2], [0, 0xFF]);
     }
 
     #[test]
     fn test_write() {
-        let mut writer = VariableSizeByteWriter::with_specified_capacity(4);
-        let mut target = std::io::Cursor::new(vec![]);
+        let mut writer = VariableSizeByteWriter::with_capacity(Vec::new(), 4);
 
-        writer.write(&mut target, 0xF, 4).unwrap();
+        writer.write(0xF, 4).unwrap();
         assert_eq!(writer.buf[..], [0xF, 0, 0, 0]);
         assert_eq!(writer.bits, 4);
-        assert_eq!(&target.get_ref()[..], []);
+        assert_eq!(&writer.target[..], []);
 
-        writer.write(&mut target, 0x7FF, 11).unwrap();
+        writer.write(0x7FF, 11).unwrap();
         assert_eq!(writer.buf[..], [0xFF, 0x7F, 0, 0]);
         assert_eq!(writer.bits, 15);
-        assert_eq!(&target.get_ref()[..], []);
+        assert_eq!(&writer.target[..], []);
 
-        writer.write(&mut target, 0xFF100, 20).unwrap();
+        writer.write(0xFF100, 20).unwrap();
         assert_eq!(writer.buf[..], [0x7F, 0x80, 0xF8, 0x7]);
         assert_eq!(writer.bits, 27);
-        assert_eq!(&target.get_ref()[..], [0xFF]);
+        assert_eq!(&writer.target[..], [0xFF]);
 
-        writer.write(&mut target, 0x1, 5).unwrap();
+        writer.write(0x1, 5).unwrap();
         assert_eq!(writer.buf[..], [0x7F, 0x80, 0xF8, 0xF]);
         assert_eq!(writer.bits, 32);
-        assert_eq!(&target.get_ref()[..], [0xFF]);
+        assert_eq!(&writer.target[..], [0xFF]);
 
-        writer.write(&mut target, 0x1A0, 9).unwrap();
+        writer.write(0x1A0, 9).unwrap();
         assert_eq!(writer.buf[..], [0xA0, 0x1, 0, 0]);
         assert_eq!(writer.bits, 9);
-        assert_eq!(&target.get_ref()[..], [0xFF, 0x7F, 0x80, 0xF8, 0xF]);
+        assert_eq!(&writer.target[..], [0xFF, 0x7F, 0x80, 0xF8, 0xF]);
     }
 
     #[test]
     fn test_can_insert() {
-        let mut writer = VariableSizeByteWriter::with_specified_capacity(6);
+        let mut writer = VariableSizeByteWriter::with_capacity(Vec::new(), 6);
         writer.bits = 20;
         assert_eq!(writer.can_insert(28), true);
         writer.bits = 21;
@@ -517,7 +516,7 @@ mod tests {
 
     #[test]
     fn test_insert() {
-        let mut writer = VariableSizeByteWriter::new();
+        let mut writer = VariableSizeByteWriter::new(Vec::new());
         writer.insert(0xF, 4);
         assert_eq!(writer.buf[0..2], [0xF, 0]);
         assert_eq!(writer.bits, 4);
@@ -529,5 +528,22 @@ mod tests {
         writer.insert(0x1BB, 9);
         assert_eq!(writer.buf[0..5], [0xAF, 0xAF, 0x77, 0xBB, 0x1]);
         assert_eq!(writer.bits, 33);
+    }
+
+    #[test]
+    fn test_drop() {
+        use std::fs::File;
+        {
+            let file = File::create("test_drop_temporary_file_buffer.temp").unwrap();
+            let mut writer = VariableSizeByteWriter::new(file);
+            writer.write(0xF, 4).unwrap();
+            writer.write(0x7FF, 11).unwrap();
+            assert_eq!(writer.buf[..4], [0xFF, 0x7F, 0, 0]);
+        }
+        let mut file = File::open("test_drop_temporary_file_buffer.temp").unwrap();
+        let mut contents = vec![];
+        file.read_to_end(&mut contents).unwrap();
+        std::fs::remove_file("test_drop_temporary_file_buffer.temp").unwrap();
+        assert_eq!(contents[..], [0xFF, 0x7F]);
     }
 }
